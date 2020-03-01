@@ -27,7 +27,8 @@
 #ifndef SCIMBRIDGECOMMONQT_H_
 #define SCIMBRIDGECOMMONQT_H_
 
-#ifdef QT4
+#include <QtGlobal>
+#if QT_VERSION >= 0x040000
 #include <QString>
 #include <QStringList>
 #else

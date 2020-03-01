@@ -23,7 +23,7 @@
 
 #include "scim-bridge-client-qt.h"
 
-#ifdef QT4
+#if QT_VERSION >= 0x040000
 using namespace Qt;
 #endif
 

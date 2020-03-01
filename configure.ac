@@ -285,7 +285,7 @@ if test "$SCIM_HAS_QT3" = "yes"; then
   AC_SUBST(QT3_LIBDIR)
 fi
 
-PKG_CHECK_MODULES(QT4, [QtGui >= 4.0, QtCore >= 4.0],
+PKG_CHECK_MODULES(QT4, [x11, QtGui >= 4.0],
             [SCIM_HAS_QT4=yes],
             [SCIM_HAS_QT4=no])
 
@@ -294,12 +294,32 @@ if test "$SCIM_HAS_QT4" = "yes"; then
     QT4_PREFIX=`$PKG_CONFIG --variable=prefix QtCore`
     QT4_LIBDIR=`$PKG_CONFIG --variable=libdir QtCore`
   fi
-  QT4_MOC=$QT4_PREFIX/bin/moc
+  QT4_MOC=`$PKG_CONFIG --variable=moc_location QtCore`
   QT4_IM_MODULEDIR=$QT4_LIBDIR/qt4/plugins/inputmethods
   AC_SUBST(QT4_MOC)
   AC_SUBST(QT4_IM_MODULEDIR)
   AC_SUBST(QT4_PREFIX)
   AC_SUBST(QT4_LIBDIR)
+fi
+
+PKG_CHECK_MODULES(QT5, [xproto, xcb-keysyms, Qt5X11Extras >= 5.0, Qt5Widgets >= 5.0],
+            [SCIM_HAS_QT5=yes],
+            [SCIM_HAS_QT5=no])
+
+if test "$SCIM_HAS_QT5" = "yes"; then
+  if test -z "$QT5_PREFIX"; then
+    QT5_PREFIX=`$PKG_CONFIG --variable=prefix Qt5Core`
+    QT5_LIBDIR=`$PKG_CONFIG --variable=libdir Qt5Core`
+  fi
+  QT5_INCDIR=`$PKG_CONFIG --variable=includedir Qt5Core`
+  QT5_VERSION=`$PKG_CONFIG --modversion Qt5Core`
+  QT5_CFLAGS="$QT5_CFLAGS -I$QT5_INCDIR/QtCore/$QT5_VERSION -I$QT5_INCDIR/QtCore/$QT5_VERSION/QtCore -I$QT5_INCDIR/QtGui/$QT5_VERSION"
+  QT5_MOC=`$PKG_CONFIG --variable=host_bins Qt5Core`/moc
+  QT5_IM_MODULEDIR=$QT5_LIBDIR/qt5/plugins/platforminputcontexts
+  AC_SUBST(QT5_MOC)
+  AC_SUBST(QT5_IM_MODULEDIR)
+  AC_SUBST(QT5_PREFIX)
+  AC_SUBST(QT5_LIBDIR)
 fi
 
 # Check if we should build scim-bridge-clutter-immodule
@@ -354,6 +374,11 @@ AC_ARG_WITH([qt4-moc],
 		[Select QT4 moc program (default to QT4_PREFIX/bin/moc)])],
 	[QT4_MOC=$with_qt4_moc])
 
+AC_ARG_WITH([qt5-moc],
+	[AS_HELP_STRING([--with-qt5-moc=file],
+		[Select QT5 moc program (default to QT5_PREFIX/bin/moc)])],
+	[QT5_MOC=$with_qt5_moc])
+
 AC_ARG_WITH([qt3-im-module-dir],
 	[AS_HELP_STRING([--with-qt3-im-module-dir=dir],
 		[Select QT3 immodule dir])],
@@ -363,6 +388,11 @@ AC_ARG_WITH([qt4-im-module-dir],
 	[AS_HELP_STRING([--with-qt4-im-module-dir=dir],
 		[Select QT4 immodule dir])],
 	[QT4_IM_MODULEDIR=$with_qt4_im_module_dir])
+
+AC_ARG_WITH([qt5-im-module-dir],
+	[AS_HELP_STRING([--with-qt5-im-module-dir=dir],
+		[Select QT5 immodule dir])],
+	[QT5_IM_MODULEDIR=$with_qt5_im_module_dir])
 
 AC_ARG_WITH([clutter-im-module-dir],
 	[AS_HELP_STRING([--with-clutter-im-module-dir=dir],
@@ -494,6 +524,12 @@ AC_ARG_ENABLE([qt4-immodule],
 		[Do not build QT4 IMModule])],
 	[],
 	[enable_qt4_immodule=yes])
+
+AC_ARG_ENABLE([qt5-immodule],
+	[AS_HELP_STRING([--disable-qt5-immodule],
+		[Do not build QT5 IMModule])],
+	[],
+	[enable_qt5_immodule=yes])
 
 AC_ARG_ENABLE([clutter-immodule],
 	[AS_HELP_STRING([--enable-clutter-immodule],
@@ -679,6 +715,17 @@ else
   enable_qt4_immodule=no
 fi
 
+if test "$enable_qt5_immodule" = "yes" -a "$SCIM_HAS_QT5" = "yes"; then
+  SCIM_BUILD_QT5_IMMODULE=1
+  SCIM_BUILD_IMMODULE=1
+  enable_immodule=yes
+  SCIM_BUILD_IM_AGENT=1
+  enable_im_agent=yes
+else
+  SCIM_BUILD_QT5_IMMODULE=0
+  enable_qt5_immodule=no
+fi
+
 if test "$enable_clutter_immodule" = "yes" -a \
 	"$SCIM_HAS_CLUTTER" = "yes" -a \
 	"$SCIM_HAS_CLUTTERIMCONTEXT" = "yes" ; then
@@ -824,6 +871,9 @@ AM_CONDITIONAL(SCIM_BUILD_QT3_IMMODULE,
 AM_CONDITIONAL(SCIM_BUILD_QT4_IMMODULE,
         [test "$enable_qt4_immodule" = "yes"])
 
+AM_CONDITIONAL(SCIM_BUILD_QT5_IMMODULE,
+        [test "$enable_qt5_immodule" = "yes"])
+
 AM_CONDITIONAL(SCIM_BUILD_CLUTTER_IMMODULE,
         [test "$enable_clutter_immodule" = "yes"])
 
@@ -870,6 +920,7 @@ AC_SUBST(SCIM_BUILD_GTK2_IMMODULE)
 AC_SUBST(SCIM_BUILD_GTK3_IMMODULE)
 AC_SUBST(SCIM_BUILD_QT3_IMMODULE)
 AC_SUBST(SCIM_BUILD_QT4_IMMODULE)
+AC_SUBST(SCIM_BUILD_QT5_IMMODULE)
 AC_SUBST(SCIM_BUILD_CLUTTER_IMMODULE)
 AC_SUBST(SCIM_BUILD_IMMODULE)
 
@@ -932,6 +983,7 @@ AC_CONFIG_FILES([Makefile
 		 extras/immodules/client-gtk/gtk3/Makefile
 		 extras/immodules/client-qt/qt3/Makefile
 		 extras/immodules/client-qt/qt4/Makefile
+		 extras/immodules/client-qt/qt5/Makefile
 		 extras/immodules/client-clutter/Makefile
 		 extras/immodules/doc/Makefile
 		 tests/Makefile
@@ -980,10 +1032,12 @@ Module options:
   GTK3 IMModule dir        $GTK3_IM_MODULEDIR
   QT3 IMModule dir         $QT3_IM_MODULEDIR
   QT4 IMModule dir         $QT4_IM_MODULEDIR
+  QT5 IMModule dir         $QT5_IM_MODULEDIR
   Clutter IMModule dir     $CLUTTER_IM_MODULEDIR
 
   QT3 moc program          $QT3_MOC
   QT4 moc program          $QT4_MOC
+  QT5 moc program          $QT5_MOC
 
   Original GTK2 IMModule   $enable_orig_gtk2_immodule
   Original GTK3 IMModule   $enable_orig_gtk3_immodule
@@ -993,5 +1047,6 @@ Module options:
   GTK3 IMModule            $enable_gtk3_immodule
   QT3 IMModule             $enable_qt3_immodule
   QT4 IMModule             $enable_qt4_immodule
+  QT5 IMModule             $enable_qt5_immodule
   CLUTTER IMModule         $enable_clutter_immodule
 ])

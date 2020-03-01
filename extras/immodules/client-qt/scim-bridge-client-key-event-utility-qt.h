@@ -36,6 +36,13 @@
 #include <X11/Xlib.h>
 #include <X11/keysym.h>
 #include <X11/Xutil.h>
+#elif QT_VERSION >= 0x050000
+#include <xcb/xcb.h>
+#include <xcb/xcb_keysyms.h>
+#include <X11/keysym.h>
+#endif
+
+#ifdef Q_WS_X11
 static const int XKeyPress = KeyPress;
 static const int XKeyRelease = KeyRelease;
 #undef KeyPress

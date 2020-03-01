@@ -26,7 +26,7 @@
 #ifndef SCIMBRIDGECLIENTQT_H_
 #define SCIMBRIDGECLIENTQT_H_
 
-#ifdef QT4
+#if QT_VERSION >= 0x040000
 #include <QObject>
 #include <QSocketNotifier>
 #else

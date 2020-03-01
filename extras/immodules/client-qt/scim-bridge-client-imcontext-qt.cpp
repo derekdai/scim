@@ -20,7 +20,8 @@
 #include <cassert>
 #include <string>
 
-#ifdef QT4
+#include <QtGlobal>
+#if QT_VERSION >= 0x040000
 #include <QColor>
 #include <QInputMethodEvent>
 #include <QPalette>
@@ -39,7 +40,7 @@
 #include "scim-bridge-client-imcontext-qt.h"
 #include "scim-bridge-client-key-event-utility-qt.h"
 
-#ifdef QT4
+#if QT_VERSION >= 0x040000
 using namespace std;
 
 using namespace Qt;
@@ -66,7 +67,7 @@ class ScimBridgeClientIMContextImpl: public _ScimBridgeClientIMContext
         bool x11FilterEvent (QWidget *widget, XEvent *event);
         bool filterEvent (const QEvent *event);
 
-#ifdef QT4
+#if QT_VERSION >= 0x040000
         void update ();
         QString identifierName ();
         QString language ();
@@ -103,7 +104,7 @@ class ScimBridgeClientIMContextImpl: public _ScimBridgeClientIMContext
         scim_bridge_imcontext_id_t get_id () const;
         void set_id (scim_bridge_imcontext_id_t new_id);
 
-#ifdef QT4
+#if QT_VERSION >= 0x040000
         bool get_surrounding_text (unsigned int before_max, unsigned int after_max, char **string, int *cursor_position);
         bool delete_surrounding_text (int offset, int length);
         bool replace_surrounding_text (const char *text, int cursor_position);
@@ -117,7 +118,7 @@ class ScimBridgeClientIMContextImpl: public _ScimBridgeClientIMContext
 
         QString preedit_string;
 
-#ifdef QT4
+#if QT_VERSION >= 0x040000
         QList<QAttribute> preedit_attributes;
 #else
         int preedit_selected_offset;
@@ -165,7 +166,7 @@ ScimBridgeClientIMContextImpl::ScimBridgeClientIMContextImpl (): id (-1), preedi
 {
     scim_bridge_pdebugln (5, "ScimBridgeClientIMContextImpl::ScimBridgeClientIMContextImpl ()");
 
-#ifdef QT4
+#if QT_VERSION >= 0x040000
     preedit_attributes.push_back (QAttribute (QInputMethodEvent::Cursor, preedit_cursor_position, true, 0));
 #else
     preedit_selected_offset = 0;
@@ -197,7 +198,7 @@ ScimBridgeClientIMContextImpl::~ScimBridgeClientIMContextImpl ()
     }
 }
 
-#ifdef QT4
+#if QT_VERSION >= 0x040000
 
 QString ScimBridgeClientIMContextImpl::identifierName ()
 {
@@ -375,7 +376,7 @@ void ScimBridgeClientIMContextImpl::reset ()
     scim_bridge_pdebugln (5, "ScimBridgeClientIMContextImpl::reset ()");
 
     preedit_cursor_position = 0;
-#ifdef QT4
+#if QT_VERSION >= 0x040000
     preedit_attributes.clear ();
     preedit_attributes.push_back (QAttribute (QInputMethodEvent::Cursor, preedit_cursor_position, true, 0));
 #else
@@ -390,7 +391,7 @@ void ScimBridgeClientIMContextImpl::reset ()
         }
     }
 
-#ifndef QT4
+#if QT_VERSION < 0x040000
     QInputContext::reset ();
 #endif
 }
@@ -469,13 +470,13 @@ void ScimBridgeClientIMContextImpl::commit ()
     scim_bridge_pdebugln (5, "ScimBridgeClientIMContextImpl::commit ()");
     
     if (commit_string.length () <= 0) return;
-#ifdef QT4
-    scim_bridge_pdebugln (9, "commit string: %s", commit_string.toUtf8 ().data ());
+#if QT_VERSION >= 0x040000
+    scim_bridge_pdebugln (9, "commit string: %s", commit_string.toUtf8 ().constData ());
 #endif
 
     const bool is_composing = isComposing ();
 
-#ifdef QT4
+#if QT_VERSION >= 0x040000
     QInputMethodEvent commit_event;
     commit_event.setCommitString (commit_string);
     sendEvent (commit_event);
@@ -497,7 +498,7 @@ void ScimBridgeClientIMContextImpl::forward_key_event (const ScimBridgeKeyEvent 
         key_event_forwarded = true;
 #ifdef Q_WS_X11
         const WId window_id = focused_widget->winId ();
-#ifdef QT4
+#if QT_VERSION >= 0x040000
         Display *x11_display = QX11Info::display();
 #else
         Display *x11_display = qt_xdisplay ();
@@ -525,7 +526,7 @@ void ScimBridgeClientIMContextImpl::set_preedit_shown (bool shown)
     if (!preedit_shown) {
         preedit_string = "";
         preedit_cursor_position = 0;
-#ifdef QT4
+#if QT_VERSION >= 0x040000
         preedit_attributes.clear ();
         preedit_attributes.push_back (QAttribute (QInputMethodEvent::Cursor, preedit_cursor_position, true, 0));
 #else
@@ -554,7 +555,7 @@ void ScimBridgeClientIMContextImpl::set_preedit_attributes (ScimBridgeAttribute*
 {
     scim_bridge_pdebugln (5, "ScimBridgeClientIMContextImpl::set_preedit_attribute ()");
     
-#ifdef QT4
+#if QT_VERSION >= 0x040000
     preedit_attributes.clear ();
     preedit_attributes.push_back (QAttribute (QInputMethodEvent::Cursor, preedit_cursor_position, true, 0));
 #else
@@ -570,7 +571,7 @@ void ScimBridgeClientIMContextImpl::set_preedit_attributes (ScimBridgeAttribute*
         const scim_bridge_attribute_type_t attribute_type = scim_bridge_attribute_get_type (attribute);
         const scim_bridge_attribute_value_t attribute_value = scim_bridge_attribute_get_value (attribute);
 
-#ifdef QT4
+#if QT_VERSION >= 0x040000
         const size_t attribute_length = attribute_end - attribute_begin;
 
         const QWidget *focused_widget = qApp->focusWidget ();
@@ -652,7 +653,7 @@ void ScimBridgeClientIMContextImpl::update_preedit ()
 {
     scim_bridge_pdebugln (5, "ScimBridgeClientIMContextImpl::update_preedit ()");
 
-#ifdef QT4
+#if QT_VERSION >= 0x040000
     preedit_attributes[0] = QAttribute (QInputMethodEvent::Cursor, preedit_cursor_position, true, 0);
     QInputMethodEvent im_event (preedit_string, preedit_attributes);
     sendEvent (im_event);
@@ -780,7 +781,7 @@ void scim_bridge_client_imcontext_update_preedit (ScimBridgeClientIMContext *imc
 
 boolean scim_bridge_client_imcontext_get_surrounding_text (ScimBridgeClientIMContext *imcontext, int before_max, int after_max, char **string, int *cursor_position)
 {
-#ifdef QT4
+#if QT_VERSION >= 0x040000
     ScimBridgeClientIMContextImpl *imcontext_impl = static_cast<ScimBridgeClientIMContextImpl*> (imcontext);
     return imcontext_impl->get_surrounding_text (before_max, after_max, string, cursor_position);
 #else
@@ -792,7 +793,7 @@ boolean scim_bridge_client_imcontext_get_surrounding_text (ScimBridgeClientIMCon
 
 boolean scim_bridge_client_imcontext_delete_surrounding_text (ScimBridgeClientIMContext *imcontext, int offset, int length)
 {
-#ifdef QT4
+#if QT_VERSION >= 0x040000
     ScimBridgeClientIMContextImpl *imcontext_impl = static_cast<ScimBridgeClientIMContextImpl*> (imcontext);
     return imcontext_impl->delete_surrounding_text (offset, length);
 #else
@@ -804,7 +805,7 @@ boolean scim_bridge_client_imcontext_delete_surrounding_text (ScimBridgeClientIM
 
 boolean scim_bridge_client_imcontext_replace_surrounding_text (ScimBridgeClientIMContext *imcontext, int cursor_position, const char *string)
 {
-#ifdef QT4
+#if QT_VERSION >= 0x040000
     ScimBridgeClientIMContextImpl *imcontext_impl = static_cast<ScimBridgeClientIMContextImpl*> (imcontext);
     return imcontext_impl->replace_surrounding_text (string, cursor_position);
 #else

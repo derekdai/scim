@@ -22,7 +22,8 @@
 #include <cstdlib>
 #include <map>
 
-#ifdef QT4
+#include <QtGlobal>
+#if QT_VERSION >= 0x040000
 #include <QApplication>
 #include <QChar>
 #include <QEvent>
@@ -82,7 +83,7 @@ static void static_initialize ()
     register_key (Qt::Key_Up, SCIM_BRIDGE_KEY_CODE_Up);
     register_key (Qt::Key_Right, SCIM_BRIDGE_KEY_CODE_Right);
     register_key (Qt::Key_Down, SCIM_BRIDGE_KEY_CODE_Down);
-#ifdef QT4
+#if QT_VERSION >= 0x040000
     register_key (Qt::Key_PageUp, SCIM_BRIDGE_KEY_CODE_Prior);
     register_key (Qt::Key_PageUp, SCIM_BRIDGE_KEY_CODE_Next);
 #else
@@ -184,7 +185,7 @@ QKeyEvent *scim_bridge_key_event_bridge_to_qt (const ScimBridgeKeyEvent *bridge_
     if (bridge_key_code < 0x1000) {
         if (bridge_key_code >= SCIM_BRIDGE_KEY_CODE_a && bridge_key_code <= SCIM_BRIDGE_KEY_CODE_z) {
             ascii_code = bridge_key_code;
-#ifdef QT4
+#if QT_VERSION >= 0x040000
             qt_key_code = QChar (ascii_code).toUpper ().toAscii ();
 #else
             qt_key_code = QChar (ascii_code).upper ();
@@ -211,7 +212,7 @@ QKeyEvent *scim_bridge_key_event_bridge_to_qt (const ScimBridgeKeyEvent *bridge_
     }
 #endif
 
-#ifdef QT4
+#if QT_VERSION >= 0x040000
     Qt::KeyboardModifiers modifiers = Qt::NoModifier;
 
     if (scim_bridge_key_event_is_alt_down (bridge_key_event)) modifiers |= Qt::AltModifier;
@@ -239,7 +240,7 @@ ScimBridgeKeyEvent *scim_bridge_key_event_qt_to_bridge (const QKeyEvent *key_eve
     
     ScimBridgeKeyEvent *bridge_key_event = scim_bridge_alloc_key_event ();
 
-#ifdef QT4
+#if QT_VERSION >= 0x040000
     const Qt::KeyboardModifiers modifiers = key_event->modifiers ();
 
     if (modifiers & Qt::ShiftModifier) {
@@ -294,13 +295,13 @@ ScimBridgeKeyEvent *scim_bridge_key_event_qt_to_bridge (const QKeyEvent *key_eve
         }
         
         if (!scim_bridge_key_event_is_caps_lock_down (bridge_key_event) ^ scim_bridge_key_event_is_shift_down (bridge_key_event)) {
-#ifdef QT4
+#if QT_VERSION >= 0x040000
 	        bridge_key_code = QChar (qt_key_code).toLower ().unicode ();
 #else
 	        bridge_key_code = QChar (qt_key_code).lower ().unicode ();
 #endif
 	    } else {
-#ifdef QT4
+#if QT_VERSION >= 0x040000
 	        bridge_key_code = QChar (qt_key_code).toUpper ().unicode ();
 #else
 	        bridge_key_code = QChar (qt_key_code).upper ().unicode ();

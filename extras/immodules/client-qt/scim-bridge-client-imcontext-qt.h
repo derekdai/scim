@@ -26,12 +26,11 @@
 #ifndef SCIMBRIDGECLIENTIMCONTEXTQT_H_
 #define SCIMBRIDGECLIENTIMCONTEXTQT_H_
 
-#ifdef QT4
+#include <QtGlobal>
+#if QT_VERSION >= 0x040000
 #include <QApplication>
 #include <QEvent>
 #include <QFont>
-#include <QInputContext>
-#include <QInputMethodEvent>
 #include <QObject>
 #include <QPoint>
 #include <QWidget>
@@ -45,6 +44,12 @@
 #include <qpoint.h>
 #include <qwidget.h>
 #endif
+#if QT_VERSION >= 0x050000
+#include <QtGui/qpa/qplatforminputcontext.h>
+#elif QT_VERSION >= 0x040000
+#include <QInputContext>
+#include <QInputMethodEvent>
+#endif
 
 #include "scim-bridge.h"
 #include "scim-bridge-attribute.h"
@@ -52,6 +57,10 @@
 #include "scim-bridge-client-imcontext.h"
 
 #include "scim-bridge-client-common-qt.h"
+
+#if QT_VERSION >= 0x050000
+typedef QPlatformInputContext QInputContext;
+#endif
 
 /**
  * IMContext class for qt client.
@@ -110,7 +119,7 @@ struct _ScimBridgeClientIMContext: public QInputContext
          */
         virtual bool filterEvent (const QEvent *event) = 0;
 
-#ifdef QT4
+#if QT_VERSION >= 0x040000
         /**
          * The focus has been changed.
          */

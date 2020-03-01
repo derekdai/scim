@@ -15,7 +15,7 @@
 ## but WITHOUT ANY WARRANTY; without even the implied warranty of
 ## MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 
-if SCIM_BUILD_QT4_IMMODULE
+if SCIM_BUILD_QT5_IMMODULE
 
 AM_CPPFLAGS	= -I$(top_builddir) \
 	    	  -I$(top_srcdir) \
@@ -24,41 +24,40 @@ AM_CPPFLAGS	= -I$(top_builddir) \
 
 noinst_HEADERS = ../scim-bridge-client-qt.h ../scim-bridge-client-imcontext-qt.h ../scim-bridge-client-key-event-utility-qt.h ../scim-bridge-client-common-qt.h ../im-scim-bridge-qt.h
 
-moduledir = @QT4_IM_MODULEDIR@
-module_LTLIBRARIES = im-scim.la
+moduledir = @QT5_IM_MODULEDIR@
+module_LTLIBRARIES = libscimplatforminputcontextplugin.la
 
-im_scim_la_SOURCES = ../im-scim-bridge-qt.cpp \
+libscimplatforminputcontextplugin_la_SOURCES = ../im-scim-bridge-qt.cpp \
 							../scim-bridge-client-qt.cpp \
 							../scim-bridge-client-imcontext-qt.cpp \
 							../scim-bridge-client-key-event-utility-qt.cpp \
 							moc_scim-bridge-client-qt.cpp \
-                            moc_im-scim-bridge-qt.cpp
+							moc_im-scim-bridge-qt.cpp
 
-im_scim_la_CXXFLAGS=@QT4_CFLAGS@ -DQT_IMMODULE -DQT4 -fPIC -Wl,-z,defs 
-im_scim_la_CFLAGS  =@QT4_CFLAGS@ -DQT_IMMODULE -DQT4 -fPIC -Wl,-z,defs 
-
-im_scim_la_LDFLAGS = -rpath $(moduledir) \
+libscimplatforminputcontextplugin_la_CXXFLAGS=@QT5_CFLAGS@ -DQT_IMMODULE -DQT5 -fPIC
+libscimplatforminputcontextplugin_la_CFLAGS  =@QT5_CFLAGS@ -DQT_IMMODULE -DQT5 -fPIC
+libscimplatforminputcontextplugin_la_LDFLAGS = -rpath $(moduledir) \
 							-avoid-version -no-undefined \
 							-module \
-							@QT4_LIBS@
+							@QT5_LIBS@
 
-im_scim_la_LIBADD  = $(top_builddir)/extras/immodules/common/libscimbridgecommon.la \
-					$(top_builddir)/extras/immodules/client-common/libscimbridgeclientcommon.la
+libscimplatforminputcontextplugin_la_LIBADD  = $(top_builddir)/extras/immodules/common/libscimbridgecommon.la \
+					        $(top_builddir)/extras/immodules/client-common/libscimbridgeclientcommon.la
 
-MOC = @QT4_MOC@
+MOC = @QT5_MOC@
 
 moc_scim-bridge-client-qt.cpp: ../scim-bridge-client-qt.h
-	$(MOC) $< -o $@
+	$(MOC) $< -DQT_VERSION=0x050000 -o $@
 
 moc_im-scim-bridge-qt.cpp: ../im-scim-bridge-qt.h
-	$(MOC) $< -o $@
+	$(MOC) $< -DQT_VERSION=0x050000 -o $@
 
 else
 
-moc_scim-bridge-client-qt.cpp:
+moc_im-scim-bridge-qt.cpp:
 	touch $@
 
-moc_im-scim-bridge-qt.cpp:
+moc_scim-bridge-client-qt.cpp:
 	touch $@
 
 endif

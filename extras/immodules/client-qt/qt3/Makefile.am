@@ -22,7 +22,7 @@ AM_CPPFLAGS	= -I$(top_builddir) \
 			  -I$(top_srcdir)/extras/immodules/common \
 			  -I$(top_srcdir)/extras/immodules/client-common
 
-noinst_HEADERS = ../scim-bridge-client-qt.h ../scim-bridge-client-imcontext-qt.h  ../scim-bridge-client-key-event-utility-qt.h ../scim-bridge-client-common-qt.h
+noinst_HEADERS = ../scim-bridge-client-qt.h ../scim-bridge-client-imcontext-qt.h  ../scim-bridge-client-key-event-utility-qt.h ../scim-bridge-client-common-qt.h  ../im-scim-bridge-qt.h
 
 moduledir = @QT3_IM_MODULEDIR@
 module_LTLIBRARIES = im-scim.la
@@ -33,8 +33,8 @@ im_scim_la_SOURCES = ../im-scim-bridge-qt.cpp \
 							../scim-bridge-client-key-event-utility-qt.cpp \
 							moc_scim-bridge-client-qt.cpp
 
-im_scim_la_CXXFLAGS=@QT3_CFLAGS@ -DQT_IMMODULE
-im_scim_la_CFLAGS  =@QT3_CFLAGS@ -DQT_IMMODULE
+im_scim_la_CXXFLAGS=@QT3_CFLAGS@ -DQT_IMMODULE -fPIC -Wl,-z,defs 
+im_scim_la_CFLAGS  =@QT3_CFLAGS@ -DQT_IMMODULE -fPIC -Wl,-z,defs 
 
 im_scim_la_LDFLAGS = -rpath $(moduledir) \
 							-avoid-version -no-undefined \
@@ -49,16 +49,24 @@ MOC = @QT3_MOC@
 moc_scim-bridge-client-qt.cpp: ../scim-bridge-client-qt.h
 	$(MOC) $< -o $@
 
+moc_im-scim-bridge-qt.cpp: ../im-scim-bridge-qt.h
+	$(MOC) $< -o $@
+
 else
 
 moc_scim-bridge-client-qt.cpp:
 	touch $@
 
+moc_im-scim-bridge-qt.cpp:
+	touch $@
+
 endif
 
 dist-hook:
-	-rm -f $(distdir)/moc_scim-bridge-client-qt.cpp
+	-rm -f $(distdir)/moc_scim-bridge-client-qt.cpp \
+                            $(distdir)/moc_im-scim-bridge-qt.cpp
 
 MAINTAINERCLEANFILES 	= Makefile.in
-CLEANFILES = moc_scim-bridge-client-qt.cpp
+CLEANFILES = moc_scim-bridge-client-qt.cpp \
+                            moc_im-scim-bridge-qt.cpp
 
