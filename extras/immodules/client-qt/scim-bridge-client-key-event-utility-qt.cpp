@@ -49,7 +49,7 @@ static map<scim_bridge_key_code_t, int> bridge_to_qt_key_map;
 static void register_key (int qt_key_code, scim_bridge_key_code_t bridge_key_code)
 {
     qt_to_bridge_key_map[qt_key_code] = bridge_key_code;
-    qt_to_bridge_key_map[bridge_key_code] = qt_key_code;
+    bridge_to_qt_key_map[bridge_key_code] = qt_key_code;
 }
 
 
@@ -185,7 +185,9 @@ QKeyEvent *scim_bridge_key_event_bridge_to_qt (const ScimBridgeKeyEvent *bridge_
     if (bridge_key_code < 0x1000) {
         if (bridge_key_code >= SCIM_BRIDGE_KEY_CODE_a && bridge_key_code <= SCIM_BRIDGE_KEY_CODE_z) {
             ascii_code = bridge_key_code;
-#if QT_VERSION >= 0x040000
+#if QT_VERSION >= 0x050000
+            qt_key_code = QChar (ascii_code).toUpper ().toLatin1 ();
+#elif QT_VERSION >= 0x040000
             qt_key_code = QChar (ascii_code).toUpper ().toAscii ();
 #else
             qt_key_code = QChar (ascii_code).upper ();
@@ -414,4 +416,96 @@ ScimBridgeKeyEvent* scim_bridge_key_event_x11_to_bridge (const XEvent *x_event)
     return bridge_key_event;
 }
 
+#endif
+
+#if QT_VERSION >= 0x050000
+xcb_generic_event_t *scim_bridge_key_event_bridge_to_xcb (const ScimBridgeKeyEvent *bridge_key_event)
+{
+//    XEvent *x_event = static_cast<XEvent*> (malloc (sizeof (XEvent)));
+
+//    XKeyEvent *x_key_event = &x_event->xkey;
+//    
+//    x_key_event->type = scim_bridge_key_event_is_pressed (bridge_key_event) ? XKeyPress : XKeyRelease;
+//    x_key_event->display = display;
+//    x_key_event->window = window_id;
+//    x_key_event->subwindow = window_id;
+//    x_key_event->serial = 0;
+//    x_key_event->send_event = FALSE;
+//    x_key_event->same_screen = FALSE;
+//
+//    struct timeval current_time;
+//    gettimeofday (&current_time, NULL);
+//    x_key_event->time = (current_time.tv_sec * 1000) + (current_time.tv_usec / 1000);
+//    
+//    if (display != NULL) {
+//        x_key_event->root = DefaultRootWindow (display);
+//        x_key_event->keycode = XKeysymToKeycode (display, (KeySym) scim_bridge_key_event_get_code (bridge_key_event));
+//    } else {
+//        x_key_event->root = None;
+//        x_key_event->keycode = SCIM_BRIDGE_KEY_CODE_NullKey;
+//    }
+//
+//    x_key_event->state = 0;
+//    if (scim_bridge_key_event_is_shift_down (bridge_key_event)) x_key_event->state |= ShiftMask;
+//    if (scim_bridge_key_event_is_control_down (bridge_key_event)) x_key_event->state |= ControlMask;
+//    if (scim_bridge_key_event_is_caps_lock_down (bridge_key_event)) x_key_event->state |= LockMask;
+//    if (scim_bridge_key_event_is_alt_down (bridge_key_event)) x_key_event->state |= Mod1Mask;
+//    if (scim_bridge_key_event_is_meta_down (bridge_key_event)) x_key_event->state |= Mod4Mask;
+    
+//    return x_event;
+    return NULL;
+}
+
+
+ScimBridgeKeyEvent* scim_bridge_key_event_xcb_to_bridge (xcb_generic_event_t *xcb_event, xcb_connection_t *xcb_connection)
+{
+    xcb_key_press_event_t *key_event = (xcb_key_press_event_t *) xcb_event;
+    
+    ScimBridgeKeyEvent *bridge_key_event = scim_bridge_alloc_key_event ();
+
+    uint8_t event_type = key_event->response_type & ~0x80;
+    scim_bridge_key_event_set_pressed (bridge_key_event, event_type == XCB_KEY_PRESS);
+
+    xcb_key_symbols_t *key_symbols = xcb_key_symbols_alloc(xcb_connection);
+    if(key_symbols == NULL) {
+        return bridge_key_event;
+    }
+    
+    xcb_keysym_t keysym = (event_type == XCB_KEY_PRESS)
+        ? xcb_key_press_lookup_keysym(key_symbols, key_event, 0)
+        : xcb_key_release_lookup_keysym(key_symbols, key_event, 0);
+    scim_bridge_key_event_set_code (bridge_key_event, keysym);
+    xcb_key_symbols_free(key_symbols);
+
+    if (key_event->state & XCB_MOD_MASK_SHIFT || (event_type == XCB_KEY_PRESS && (keysym == XK_Shift_L || keysym == XK_Shift_R))) {
+        scim_bridge_key_event_set_shift_down (bridge_key_event, TRUE);
+    }
+    if (key_event->state & XCB_MOD_MASK_CONTROL || (event_type == XCB_KEY_PRESS && (keysym == XK_Control_L || keysym == XK_Control_R))) {
+        scim_bridge_key_event_set_control_down (bridge_key_event, TRUE);
+    }
+    if (key_event->state & XCB_MOD_MASK_LOCK || (event_type == XCB_KEY_PRESS && (keysym == XK_Caps_Lock))) {
+        scim_bridge_key_event_set_caps_lock_down (bridge_key_event, TRUE);
+    }
+    if (key_event->state & XCB_MOD_MASK_1 || (event_type == XCB_KEY_PRESS && (keysym == XK_Alt_L || keysym == XK_Alt_R))) {
+        scim_bridge_key_event_set_alt_down (bridge_key_event, TRUE);
+    }
+    // super or window key
+    if (key_event->state & XCB_MOD_MASK_4 || (event_type == XCB_KEY_PRESS && (keysym == XK_Meta_L || keysym == XK_Meta_R))) {
+        scim_bridge_key_event_set_meta_down (bridge_key_event, TRUE);
+    }
+
+    if (scim_bridge_key_event_get_code (bridge_key_event) == SCIM_BRIDGE_KEY_CODE_backslash) {
+        boolean kana_ro = FALSE;
+        int keysym_size = 0;
+        xcb_key_symbols_t *key_symbols = xcb_key_symbols_alloc(xcb_connection);
+        if(key_symbols != NULL) {
+            kana_ro = (xcb_key_symbols_get_keysym(key_symbols, key_event->detail, 0) == XK_backslash
+                    && xcb_key_symbols_get_keysym(key_symbols, key_event->detail, 1) == XK_underscore);
+            xcb_key_symbols_free(key_symbols);
+        }
+        scim_bridge_key_event_set_quirk_enabled (bridge_key_event, SCIM_BRIDGE_KEY_QUIRK_KANA_RO, kana_ro);
+    }
+    
+    return bridge_key_event;
+}
 #endif

@@ -34,7 +34,7 @@ class ScimBridgeInputContextPlugin: public QInputContextPlugin
         ~ScimBridgeInputContextPlugin ();
 
 #if QT_VERSION >= 0x050000
-        QInputContext *create (const QString &key, const QStringList &paramList);
+        QInputContext *create(const QString &key, const QStringList &paramList);
 #else
     private:
 

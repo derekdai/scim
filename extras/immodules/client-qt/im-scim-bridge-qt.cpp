@@ -31,12 +31,6 @@ using namespace Qt;
 /* Static Variables */
 static ScimBridgeClientQt *client = NULL;
 
-#if QT_VERSION < 0x050000
-
-/* Implementations */
-QStringList ScimBridgeInputContextPlugin::scim_languages;
-
-
 ScimBridgeInputContextPlugin::ScimBridgeInputContextPlugin ()
 {
 }
@@ -47,6 +41,12 @@ ScimBridgeInputContextPlugin::~ScimBridgeInputContextPlugin ()
     delete client;
     client = NULL;
 }
+
+#if QT_VERSION < 0x050000
+
+/* Implementations */
+QStringList ScimBridgeInputContextPlugin::scim_languages;
+
 
 QStringList ScimBridgeInputContextPlugin::keys () const {
     QStringList identifiers;

@@ -102,6 +102,7 @@ struct _ScimBridgeClientIMContext: public QInputContext
          */
         virtual ~_ScimBridgeClientIMContext () {}
 
+#ifdef Q_WS_X11
         /**
          * Filter a event from X11.
          *
@@ -110,6 +111,40 @@ struct _ScimBridgeClientIMContext: public QInputContext
          * @return If this event is consumed or not.
          */
         virtual bool x11FilterEvent (QWidget *widget, XEvent *event) = 0;
+#endif
+
+#if QT_VERSION < 0x040000
+
+        /**
+         * Focus an IMContext.
+         */
+        virtual void setFocus () = 0;
+
+        /**
+         * Unfocus an IMContext.
+         */
+        virtual void unsetFocus () = 0;
+        
+        /**
+         * Set the focused area in the display.
+         *
+         * @param x The X loation of the focused area.
+         * @param y The Y loation of the focused area.
+         * @param w The width of the focused area.
+         * @param h The height of the focused area.
+         * @param font The font.
+         */
+        virtual void setMicroFocus (int x, int y, int w, int h, QFont *font = 0) = 0;
+
+        /**
+         * Filter a mouse event.
+         *
+         * @param offset The cursor offset in the preedit string.
+         * @param type The type of the event.
+         * @param button The button of this event.
+         * @param state The state of the button.
+         */
+        virtual void mouseHandler (int offset, QEvent::Type type, ButtonState button, ButtonState state) = 0;
 
         /**
          * Filter a key event.
@@ -119,7 +154,8 @@ struct _ScimBridgeClientIMContext: public QInputContext
          */
         virtual bool filterEvent (const QEvent *event) = 0;
 
-#if QT_VERSION >= 0x040000
+#elif QT_VERSION < 0x050000
+
         /**
          * The focus has been changed.
          */
@@ -153,39 +189,6 @@ struct _ScimBridgeClientIMContext: public QInputContext
          * @param widget The widget under destroying.
          */
         virtual void widgetDestroyed (QWidget *widget) = 0;
-
-#else
-
-        /**
-         * Focus an IMContext.
-         */
-        virtual void setFocus () = 0;
-
-        /**
-         * Unfocus an IMContext.
-         */
-        virtual void unsetFocus () = 0;
-        
-        /**
-         * Set the focused area in the display.
-         *
-         * @param x The X loation of the focused area.
-         * @param y The Y loation of the focused area.
-         * @param w The width of the focused area.
-         * @param h The height of the focused area.
-         * @param font The font.
-         */
-        virtual void setMicroFocus (int x, int y, int w, int h, QFont *font = 0) = 0;
-
-        /**
-         * Filter a mouse event.
-         *
-         * @param offset The cursor offset in the preedit string.
-         * @param type The type of the event.
-         * @param button The button of this event.
-         * @param state The state of the button.
-         */
-        virtual void mouseHandler (int offset, QEvent::Type type, ButtonState button, ButtonState state) = 0;
 
 #endif
 

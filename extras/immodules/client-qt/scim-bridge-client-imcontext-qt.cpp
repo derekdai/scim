@@ -21,15 +21,18 @@
 #include <string>
 
 #include <QtGlobal>
-#if QT_VERSION >= 0x040000
+#if QT_VERSION >= 0x050000
+#include <QInputMethodEvent>
+#include <QTextCharFormat>
+#include <QAbstractNativeEventFilter>
+#elif QT_VERSION >= 0x040000
 #include <QColor>
 #include <QInputMethodEvent>
 #include <QPalette>
 #include <QTextCharFormat>
-
-#ifdef Q_WS_X11
-#include <QX11Info>
 #endif
+#if defined(Q_WS_X11) || (QT_VERSION >= 0x050000)
+#include <QX11Info>
 #endif
 
 #include "scim-bridge-output.h"
@@ -48,6 +51,13 @@ using namespace Qt;
 typedef QInputMethodEvent::Attribute QAttribute;
 #endif
 
+#if QT_VERSION < 0x050000
+namespace Qt {
+    typedef QFlags<InputMethodQuery> InputMethodQueries;
+}
+class QAbstractNativeEventFilter {};
+#endif
+
 /* Static variables */
 class ScimBridgeClientIMContextImpl;
 
@@ -56,7 +66,7 @@ static ScimBridgeClientIMContextImpl *focused_imcontext = NULL;
 static bool key_event_forwarded = false;
 
 /* Class Definition */
-class ScimBridgeClientIMContextImpl: public _ScimBridgeClientIMContext
+class ScimBridgeClientIMContextImpl: public _ScimBridgeClientIMContext, QAbstractNativeEventFilter
 {
 
     public:
@@ -64,24 +74,56 @@ class ScimBridgeClientIMContextImpl: public _ScimBridgeClientIMContext
         ScimBridgeClientIMContextImpl ();
         ~ScimBridgeClientIMContextImpl ();
 
+#ifdef Q_WS_X11
         bool x11FilterEvent (QWidget *widget, XEvent *event);
-        bool filterEvent (const QEvent *event);
+#endif
 
-#if QT_VERSION >= 0x040000
-        void update ();
+#if QT_VERSION >= 0x050000
+        bool nativeEventFilter(const QByteArray &eventType, void *message, long *result);
+#endif
+
+#if QT_VERSION >= 0x050000
+        bool isValid() const;
+        //bool hasCapability(Capability capability) const;
+
+        //void invokeAction(QInputMethod::Action, int cursorPosition);
+        //QRectF keyboardRect() const;
+
+        void showInputPanel();
+        void hideInputPanel();
+        bool isInputPanelVisible() const;
+        //
+        //QLocale locale() const;
+        //Qt::LayoutDirection inputDirection() const;
+
+        void update(Qt::InputMethodQueries queries=Qt::ImMicroFocus);
+
+        void setFocusObject(QObject *object);
+
+        // helper function to abstract behaviours between Qt4 and Qt5
+        void sendEvent(QInputMethodEvent &event);
+        QWidget *focusWidget() const;
+#elif QT_VERSION >= 0x040000
+        void update () { updateMicroFocus(); }
         QString identifierName ();
         QString language ();
 
-        void setFocusWidget (QWidget *widget);
         void widgetDestroyed (QWidget *widget);
 
-        bool isComposing () const;
         void mouseHandler (int offset, QMouseEvent *event);
 #else
+        // since this function can't handling caps lock correctly (QEvent lack of information),
+        // I move it here to not be included in Qt >= 4.0
+        bool filterEvent (const QEvent *event);
         void setFocus ();
         void unsetFocus ();
         void setMicroFocus (int x, int y, int w, int h, QFont *font = 0);
         void mouseHandler (int offset, QEvent::Type type, ButtonState button, ButtonState state);
+#endif
+
+#if QT_VERSION >= 0x040000
+        bool isComposing () const { return preedit_string.size () > 0; }
+        void updateMicroFocus ();
 #endif
 
         void reset ();
@@ -123,6 +165,10 @@ class ScimBridgeClientIMContextImpl: public _ScimBridgeClientIMContext
 #else
         int preedit_selected_offset;
         int preedit_selected_length;
+#endif
+
+#if QT_VERSION >= 0x050000
+        QObject *focused_object;
 #endif
 
         int preedit_cursor_position;
@@ -180,12 +226,20 @@ ScimBridgeClientIMContextImpl::ScimBridgeClientIMContextImpl (): id (-1), preedi
     } else {
         scim_bridge_pdebugln (1, "IMContext registered: id = %d", id);
     }
+
+#if QT_VERSION >= 0x050000
+    qApp->installNativeEventFilter(this);
+#endif
 }
 
 
 ScimBridgeClientIMContextImpl::~ScimBridgeClientIMContextImpl ()
 {
     scim_bridge_pdebugln (5, "ScimBridgeClientIMContextImpl::~ScimBridgeClientIMContextImpl ()");
+
+#if QT_VERSION >= 0x050000
+    qApp->removeNativeEventFilter(this);
+#endif
 
     if (this == focused_imcontext) focus_out ();
 
@@ -198,7 +252,92 @@ ScimBridgeClientIMContextImpl::~ScimBridgeClientIMContextImpl ()
     }
 }
 
-#if QT_VERSION >= 0x040000
+
+#if QT_VERSION >= 0x050000
+
+void ScimBridgeClientIMContextImpl::update(Qt::InputMethodQueries queries)
+{
+    scim_bridge_pdebugln (4, "ScimBridgeClientIMContextImpl::update ()");
+
+    if(queries & Qt::ImMicroFocus) {
+        updateMicroFocus();
+    }
+}
+
+bool ScimBridgeClientIMContextImpl::isValid() const
+{
+    scim_bridge_pdebugln (5, "ScimBridgeClientIMContextImpl::isValid ()");
+    return scim_bridge_client_is_initialized();
+}
+
+void ScimBridgeClientIMContextImpl::showInputPanel()
+{
+    scim_bridge_pdebugln (5, "ScimBridgeClientIMContextImpl::showInputPanel ()");
+    focus_in();
+}
+
+void ScimBridgeClientIMContextImpl::hideInputPanel()
+{
+    scim_bridge_pdebugln (5, "ScimBridgeClientIMContextImpl::hideInputPanel ()");
+    focus_out();
+}
+
+bool ScimBridgeClientIMContextImpl::isInputPanelVisible() const
+{
+    scim_bridge_pdebugln (5, "ScimBridgeClientIMContextImpl::isInputPanelVisible ()");
+    return scim_bridge_client_is_messenger_opened ();
+}
+
+void ScimBridgeClientIMContextImpl::setFocusObject(QObject *object)
+{
+    scim_bridge_pdebugln (5, "ScimBridgeClientIMContextImpl::setFocusObject");
+
+    focused_object = object;
+}
+
+void ScimBridgeClientIMContextImpl::sendEvent(QInputMethodEvent &event)
+{
+    if(focused_object) {
+        focused_object->event(&event);
+    }
+}
+
+QWidget *ScimBridgeClientIMContextImpl::focusWidget() const
+{
+    return qobject_cast<QWidget *>(focused_object);
+}
+
+bool ScimBridgeClientIMContextImpl::nativeEventFilter(const QByteArray &eventType, void *message, long *result)
+{
+    if (!focused_object || eventType != "xcb_generic_event_t") return false;
+
+    scim_bridge_pdebugln (5, "ScimBridgeClientIMContextImpl::nativeEventFilter");
+
+    xcb_generic_event_t *event = static_cast<xcb_generic_event_t*>(message);
+    uint8_t event_type = event->response_type & ~0x80;
+    if (key_event_forwarded || (event_type != XCB_KEY_PRESS && event_type != XCB_KEY_RELEASE)) return false;
+    
+    if (focused_imcontext != this) focus_in ();
+
+    if (scim_bridge_client_is_messenger_opened ()) {
+        ScimBridgeKeyEvent *bridge_key_event = scim_bridge_key_event_xcb_to_bridge (event, QX11Info::connection());
+
+        boolean consumed = FALSE;
+        const retval_t retval_error = scim_bridge_client_handle_key_event (this, bridge_key_event, &consumed);
+
+        scim_bridge_free_key_event (bridge_key_event);
+
+        if (retval_error) {
+            scim_bridge_perrorln ("An IOException at x11FilterEvent ()");
+        } else {
+            return consumed;
+        }
+    }
+
+    return false;
+}
+
+#elif QT_VERSION >= 0x040000
 
 QString ScimBridgeClientIMContextImpl::identifierName ()
 {
@@ -217,64 +356,8 @@ void ScimBridgeClientIMContextImpl::widgetDestroyed (QWidget *widget)
     update ();
 }
 
-void ScimBridgeClientIMContextImpl::setFocusWidget (QWidget *widget)
-{
-    scim_bridge_pdebugln (4, "ScimBridgeClientIMContextImpl::setFocusWidget ()");
-    QInputContext::setFocusWidget (widget);
-	if (widget == NULL) {
-    	focus_out ();
-	}
-	else {
-    	focus_in ();
-	}
-    update ();
-}
-
-void ScimBridgeClientIMContextImpl::update ()
-{
-    scim_bridge_pdebugln (4, "ScimBridgeClientIMContextImpl::update ()");
-
-    QWidget *focused_widget = qApp->focusWidget ();
-    if (focused_widget != NULL) {
-        if (focused_imcontext == NULL)
-            focus_in ();
-
-        QRect rect = focused_widget->inputMethodQuery (ImMicroFocus).toRect ();
-        QPoint point (rect.x (), rect.y () + rect.height ());
-        QPoint new_cursor_location = focused_widget->mapToGlobal (point);
-        set_cursor_location (new_cursor_location);
-    }
-}
-
-bool ScimBridgeClientIMContextImpl::isComposing () const
-{
-    scim_bridge_pdebugln (4, "ScimBridgeClientIMContextImpl::isComposing ()");
-    return preedit_string.size () > 0;
-}
-
 void ScimBridgeClientIMContextImpl::mouseHandler (int offset, QMouseEvent *mevent)
 {
-}
-
-bool ScimBridgeClientIMContextImpl::get_surrounding_text (unsigned int before_max, unsigned int after_max, char **text, int *cursor_position)
-{
-    scim_bridge_pdebugln (6, "ScimBridgeClientIMContextImpl::get_surrounding_text ()");
-    scim_bridge_perrorln ("FIXME: scim_bridge_client_imcontext_delete_surrounding_text () is not yet implemented.");
-    return false;
-}
-
-bool ScimBridgeClientIMContextImpl::delete_surrounding_text (int offset, int length)
-{
-    scim_bridge_pdebugln (6, "ScimBridgeClientIMContextImpl::delete_surrounding_text ()");
-    scim_bridge_perrorln ("FIXME: scim_bridge_client_imcontext_delete_surrounding_text () is not yet implemented.");
-    return false;
-}
-
-bool ScimBridgeClientIMContextImpl::replace_surrounding_text (const char *text, int cursor_position)
-{
-    scim_bridge_pdebugln (6, "ScimBridgeClientIMContextImpl::replace_surrounding_text ()");
-    scim_bridge_perrorln ("FIXME: scim_bridge_client_imcontext_delete_surrounding_text () is not yet implemented.");
-    return false;
 }
 
 #else
@@ -306,37 +389,6 @@ void ScimBridgeClientIMContextImpl::setMicroFocus (int x, int y, int w, int h, Q
 void ScimBridgeClientIMContextImpl::mouseHandler (int offset, QEvent::Type type, ButtonState button, ButtonState state)
 {
 }
-#endif
-
-
-bool ScimBridgeClientIMContextImpl::x11FilterEvent (QWidget *widget, XEvent *xevent)
-{
-    scim_bridge_pdebugln (5, "ScimBridgeClientIMContextImpl::x11FilterEvent ()");
-
-#ifdef Q_WS_X11
-    if (key_event_forwarded || (xevent->type != XKeyPress && xevent->type != XKeyRelease)) return false;
-    
-    if (focused_imcontext != this) focus_in ();
-
-    if (scim_bridge_client_is_messenger_opened ()) {
-        ScimBridgeKeyEvent *bridge_key_event = scim_bridge_key_event_x11_to_bridge (xevent);
-
-        boolean consumed = FALSE;
-        const retval_t retval_error = scim_bridge_client_handle_key_event (this, bridge_key_event, &consumed);
-
-        scim_bridge_free_key_event (bridge_key_event);
-
-        if (retval_error) {
-            scim_bridge_perrorln ("An IOException at x11FilterEvent ()");
-        } else {
-            return consumed;
-        }
-    }
-#endif
-
-    return false;
-}
-
 
 bool ScimBridgeClientIMContextImpl::filterEvent (const QEvent *qevent)
 {
@@ -370,6 +422,76 @@ bool ScimBridgeClientIMContextImpl::filterEvent (const QEvent *qevent)
     return false;
 }
 
+#endif
+
+#if QT_VERSION >= 0x040000
+
+void ScimBridgeClientIMContextImpl::updateMicroFocus ()
+{
+    QWidget *focused_widget = focusWidget ();
+    if (focused_widget != NULL) {
+        if (focused_imcontext == NULL)
+            focus_in ();
+
+        QRect rect = focused_widget->inputMethodQuery (ImMicroFocus).toRect ();
+        QPoint point (rect.x (), rect.y () + rect.height ());
+        QPoint new_cursor_location = focused_widget->mapToGlobal (point);
+        set_cursor_location (new_cursor_location);
+    }
+}
+
+bool ScimBridgeClientIMContextImpl::get_surrounding_text (unsigned int before_max, unsigned int after_max, char **text, int *cursor_position)
+{
+    scim_bridge_pdebugln (6, "ScimBridgeClientIMContextImpl::get_surrounding_text ()");
+    scim_bridge_perrorln ("FIXME: scim_bridge_client_imcontext_delete_surrounding_text () is not yet implemented.");
+    return false;
+}
+
+bool ScimBridgeClientIMContextImpl::delete_surrounding_text (int offset, int length)
+{
+    scim_bridge_pdebugln (6, "ScimBridgeClientIMContextImpl::delete_surrounding_text ()");
+    scim_bridge_perrorln ("FIXME: scim_bridge_client_imcontext_delete_surrounding_text () is not yet implemented.");
+    return false;
+}
+
+bool ScimBridgeClientIMContextImpl::replace_surrounding_text (const char *text, int cursor_position)
+{
+    scim_bridge_pdebugln (6, "ScimBridgeClientIMContextImpl::replace_surrounding_text ()");
+    scim_bridge_perrorln ("FIXME: scim_bridge_client_imcontext_delete_surrounding_text () is not yet implemented.");
+    return false;
+}
+
+#endif
+
+#ifdef Q_WS_X11
+
+bool ScimBridgeClientIMContextImpl::x11FilterEvent (QWidget *widget, XEvent *xevent)
+{
+    scim_bridge_pdebugln (5, "ScimBridgeClientIMContextImpl::x11FilterEvent ()");
+
+    if (key_event_forwarded || (xevent->type != XKeyPress && xevent->type != XKeyRelease)) return false;
+    
+    if (focused_imcontext != this) focus_in ();
+
+    if (scim_bridge_client_is_messenger_opened ()) {
+        ScimBridgeKeyEvent *bridge_key_event = scim_bridge_key_event_x11_to_bridge (xevent);
+
+        boolean consumed = FALSE;
+        const retval_t retval_error = scim_bridge_client_handle_key_event (this, bridge_key_event, &consumed);
+
+        scim_bridge_free_key_event (bridge_key_event);
+
+        if (retval_error) {
+            scim_bridge_perrorln ("An IOException at x11FilterEvent ()");
+        } else {
+            return consumed;
+        }
+    }
+
+    return false;
+}
+
+#endif
 
 void ScimBridgeClientIMContextImpl::reset ()
 {
