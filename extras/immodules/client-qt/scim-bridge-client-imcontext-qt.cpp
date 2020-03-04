@@ -257,7 +257,7 @@ ScimBridgeClientIMContextImpl::~ScimBridgeClientIMContextImpl ()
 
 void ScimBridgeClientIMContextImpl::update(Qt::InputMethodQueries queries)
 {
-    scim_bridge_pdebugln (4, "ScimBridgeClientIMContextImpl::update ()");
+    scim_bridge_pdebugln (4, "ScimBridgeClientIMContextImpl::update (0x%lx)", queries);
 
     if(queries & Qt::ImMicroFocus) {
         updateMicroFocus();
@@ -272,13 +272,19 @@ bool ScimBridgeClientIMContextImpl::isValid() const
 
 void ScimBridgeClientIMContextImpl::showInputPanel()
 {
+    if(scim_bridge_client_is_messenger_opened ()) return;
+
     scim_bridge_pdebugln (5, "ScimBridgeClientIMContextImpl::showInputPanel ()");
+
     focus_in();
 }
 
 void ScimBridgeClientIMContextImpl::hideInputPanel()
 {
+    if(!scim_bridge_client_is_messenger_opened ()) return;
+
     scim_bridge_pdebugln (5, "ScimBridgeClientIMContextImpl::hideInputPanel ()");
+    
     focus_out();
 }
 
@@ -309,14 +315,15 @@ QWidget *ScimBridgeClientIMContextImpl::focusWidget() const
 
 bool ScimBridgeClientIMContextImpl::nativeEventFilter(const QByteArray &eventType, void *message, long *result)
 {
-    if (!focused_object || eventType != "xcb_generic_event_t") return false;
-
-    scim_bridge_pdebugln (5, "ScimBridgeClientIMContextImpl::nativeEventFilter");
+    bool isXcb = eventType.startsWith("xcb");
+    if (!isXcb && !focused_object) return false;
 
     xcb_generic_event_t *event = static_cast<xcb_generic_event_t*>(message);
     uint8_t event_type = event->response_type & ~0x80;
     if (key_event_forwarded || (event_type != XCB_KEY_PRESS && event_type != XCB_KEY_RELEASE)) return false;
     
+    scim_bridge_pdebugln (5, "ScimBridgeClientIMContextImpl::nativeEventFilter");
+
     if (focused_imcontext != this) focus_in ();
 
     if (scim_bridge_client_is_messenger_opened ()) {
@@ -589,9 +596,10 @@ void ScimBridgeClientIMContextImpl::set_commit_string (const char *new_string)
 
 void ScimBridgeClientIMContextImpl::commit ()
 {
-    scim_bridge_pdebugln (5, "ScimBridgeClientIMContextImpl::commit ()");
-    
     if (commit_string.length () <= 0) return;
+
+    scim_bridge_pdebugln (5, "ScimBridgeClientIMContextImpl::commit (): '%s', %d", commit_string.toUtf8().constData(), commit_string.length());
+    
 #if QT_VERSION >= 0x040000
     scim_bridge_pdebugln (9, "commit string: %s", commit_string.toUtf8 ().constData ());
 #endif
@@ -606,6 +614,8 @@ void ScimBridgeClientIMContextImpl::commit ()
     if (!is_composing) sendIMEvent (QEvent::IMStart);
     sendIMEvent (QEvent::IMEnd, commit_string);
 #endif
+
+    commit_string.resize(0);
 
     if (is_composing) update_preedit ();
 }
