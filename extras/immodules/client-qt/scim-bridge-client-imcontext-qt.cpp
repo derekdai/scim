@@ -711,6 +711,9 @@ void ScimBridgeClientIMContextImpl::set_preedit_attributes (ScimBridgeAttribute*
         const size_t attribute_length = attribute_end - attribute_begin;
 
         const QWidget *focused_widget = qApp->focusWidget ();
+        if(!focused_widget) {
+            break;
+        }
         const QPalette &palette = focused_widget->palette ();
 
         const QBrush &reversed_foreground = palette.base ();
