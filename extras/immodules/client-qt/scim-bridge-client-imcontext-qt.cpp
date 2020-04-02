@@ -66,7 +66,7 @@ static ScimBridgeClientIMContextImpl *focused_imcontext = NULL;
 static bool key_event_forwarded = false;
 
 /* Class Definition */
-class ScimBridgeClientIMContextImpl: public _ScimBridgeClientIMContext, QAbstractNativeEventFilter
+class ScimBridgeClientIMContextImpl: public _ScimBridgeClientIMContext, private QAbstractNativeEventFilter
 {
 
     public:
@@ -103,6 +103,7 @@ class ScimBridgeClientIMContextImpl: public _ScimBridgeClientIMContext, QAbstrac
         // helper function to abstract behaviours between Qt4 and Qt5
         void sendEvent(QInputMethodEvent &event);
         QWidget *focusWidget() const;
+
 #elif QT_VERSION >= 0x040000
         void update () { updateMicroFocus(); }
         QString identifierName ();
@@ -208,7 +209,7 @@ _ScimBridgeClientIMContext *_ScimBridgeClientIMContext::alloc ()
 }
 
 
-ScimBridgeClientIMContextImpl::ScimBridgeClientIMContextImpl (): id (-1), preedit_shown (false)
+ScimBridgeClientIMContextImpl::ScimBridgeClientIMContextImpl (): id (-1), preedit_shown (false), preedit_cursor_position(0)
 {
     scim_bridge_pdebugln (5, "ScimBridgeClientIMContextImpl::ScimBridgeClientIMContextImpl ()");
 
@@ -217,6 +218,9 @@ ScimBridgeClientIMContextImpl::ScimBridgeClientIMContextImpl (): id (-1), preedi
 #else
     preedit_selected_offset = 0;
     preedit_selected_length = 0;
+#endif
+#if QT_VERSION >= 0x050000
+    focused_object = NULL;
 #endif
 
     if (!scim_bridge_client_is_messenger_opened ()) {
@@ -304,7 +308,7 @@ void ScimBridgeClientIMContextImpl::setFocusObject(QObject *object)
 void ScimBridgeClientIMContextImpl::sendEvent(QInputMethodEvent &event)
 {
     if(focused_object) {
-        focused_object->event(&event);
+        qApp->sendEvent(focused_object, &event);
     }
 }
 
