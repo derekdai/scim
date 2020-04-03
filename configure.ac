@@ -320,6 +320,15 @@ if test "$SCIM_HAS_QT5" = "yes"; then
   AC_SUBST(QT5_IM_MODULEDIR)
   AC_SUBST(QT5_PREFIX)
   AC_SUBST(QT5_LIBDIR)
+
+  tmp_CPPFLAGS="$CPPFLAGS"
+  CPPFLAGS="$QT5_CFLAGS -fPIC"
+  AC_LANG_PUSH([C++])
+  AC_CHECK_HEADERS([QtGui/qpa/qplatforminputcontext.h],
+                   [SCIM_HAS_QT5_PRIVATE=yes],
+                   [AC_MSG_ERROR([QT5 platform development headers are needed. In Debian based OS, install qtbase5-private-dev package])])
+  CPPFLAGS="$tmp_CPPFLAGS"
+  AC_LANG_POP
 fi
 
 # Check if we should build scim-bridge-clutter-immodule
