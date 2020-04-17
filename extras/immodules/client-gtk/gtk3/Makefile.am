@@ -41,7 +41,8 @@ im_scim_la_CFLAGS  =@GTK3_CFLAGS@
 im_scim_la_LDFLAGS = -rpath $(moduledir) \
 		     -avoid-version -no-undefined \
 		     -module \
-		     @GTK3_LIBS@
+		     @GTK3_LIBS@ \
+		     @X_LIBS@
 
 im_scim_la_LIBADD  = $(top_builddir)/extras/immodules/common/libscimbridgecommon.la \
 					$(top_builddir)/extras/immodules/client-common/libscimbridgeclientcommon.la
