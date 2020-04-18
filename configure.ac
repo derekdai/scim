@@ -289,6 +289,10 @@ PKG_CHECK_MODULES(QT4, [x11, QtGui >= 4.0],
             [SCIM_HAS_QT4=yes],
             [SCIM_HAS_QT4=no])
 
+PKG_CHECK_MODULES(SD, [libsystemd >= 245],
+            [SCIM_HAS_SD=yes],
+            [SCIM_HAS_SD=no])
+
 if test "$SCIM_HAS_QT4" = "yes"; then
   if test -z "$QT4_PREFIX"; then
     QT4_PREFIX=`$PKG_CONFIG --variable=prefix QtCore`
@@ -474,6 +478,12 @@ AC_ARG_ENABLE([frontend-socket],
 	[], 
 	[enable_frontend_socket=yes])
 
+AC_ARG_ENABLE([frontend-ibus],
+	[AS_HELP_STRING([--disable-frontend-ibus],
+		[Do not build IBus FrontEnd module])],
+	[],
+	[enable_frontend_ibus=yes])
+
 AC_ARG_ENABLE([im-rawcode],
 	[AS_HELP_STRING([--disable-im-rawcode],
 		[Do not build RawCode IMEngine module])],
@@ -624,6 +634,13 @@ if test "$enable_frontend_socket" = "yes" -a "$socket_ok" = "yes"; then
 else
   SCIM_BUILD_FRONTEND_SOCKET=0
   enable_frontend_socket=no
+fi
+
+if test "$enable_frontend_ibus" = "yes" -a "$SCIM_HAS_SD" = "yes"; then
+  SCIM_BUILD_FRONTEND_IBUS=1
+else
+  SCIM_BUILD_FRONTEND_IBUS=0
+  enable_frontend_ibusus=no
 fi
 
 if test "$enable_im_rawcode" = "yes"; then
@@ -853,6 +870,9 @@ AM_CONDITIONAL(SCIM_BUILD_FRONTEND_X11,
 AM_CONDITIONAL(SCIM_BUILD_FRONTEND_SOCKET,
 		[test "$enable_frontend_socket" = "yes"])
 
+AM_CONDITIONAL(SCIM_BUILD_FRONTEND_IBUS,
+		[test "$enable_frontend_ibus" = "yes"])
+
 AM_CONDITIONAL(SCIM_BUILD_IMENGINE_SOCKET,
 		[test "$enable_im_socket" = "yes"])
 
@@ -914,6 +934,7 @@ AC_SUBST(SCIM_BUILD_CONFIG_SIMPLE)
 AC_SUBST(SCIM_BUILD_CONFIG_SOCKET)
 AC_SUBST(SCIM_BUILD_FRONTEND_X11)
 AC_SUBST(SCIM_BUILD_FRONTEND_SOCKET)
+AC_SUBST(SCIM_BUILD_FRONTEND_IBUS)
 AC_SUBST(SCIM_BUILD_IMENGINE_RAWCODE)
 AC_SUBST(SCIM_BUILD_IMENGINE_TABLE)
 AC_SUBST(SCIM_BUILD_IMENGINE_SOCKET)

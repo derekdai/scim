@@ -64,5 +64,4 @@ src/scim_types.h
 stamp-h1
 .ccls-cache
 moc_*.cpp
-xxx/
 configure-dev
