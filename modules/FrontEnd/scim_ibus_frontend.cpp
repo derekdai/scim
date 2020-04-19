@@ -38,6 +38,7 @@
 #define Uses_C_STDIO
 #define Uses_C_STDLIB
 
+#include <sstream>
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <unistd.h>
@@ -54,8 +55,8 @@
 #include "scim_private.h"
 #include "scim.h"
 
-#include "scim_ibus_utils.h"
 #include "scim_ibus_types.h"
+#include "scim_ibus_utils.h"
 #include "scim_ibus_ic.h"
 #include "scim_x11_ic.h"
 #include "scim_x11_utils.h"
@@ -440,7 +441,7 @@ IBusFrontEnd::delete_surrounding_text (int siid, int offset, int len)
 }
 
 int
-IBusFrontEnd::panel_connect()
+IBusFrontEnd::panel_connect ()
 {
     log_func();
 
@@ -466,7 +467,7 @@ IBusFrontEnd::panel_connect()
 }
 
 void
-IBusFrontEnd::panel_disconnect()
+IBusFrontEnd::panel_disconnect ()
 {
     log_func();
 
@@ -480,7 +481,7 @@ IBusFrontEnd::panel_disconnect()
     }
 }
 
-int IBusFrontEnd::create_input_context(IBusInputContextPointer &out, int siid)
+int IBusFrontEnd::create_ic (IBusInputContextPointer &out, int siid)
 {
     int id = next_ic_id();
     IBusInputContextPointer ic = new IBusInputContext(this, id, siid);
@@ -496,7 +497,7 @@ int IBusFrontEnd::create_input_context(IBusInputContextPointer &out, int siid)
     return 0;
 }
 
-IBusInputContextPointer IBusFrontEnd::find_input_context(int ic_id)
+IBusInputContext *IBusFrontEnd::find_ic (int ic_id)
 {
     std::map<int, IBusInputContextPointer>::iterator it = m_id_ic_map.find(ic_id);
     if (it == m_id_ic_map.end()) {
@@ -511,15 +512,22 @@ int IBusFrontEnd::next_ic_id()
     return m_id_counter ++;
 }
 
-int IBusFrontEnd::create_input_context(sd_bus_message *m, sd_bus_error *ret_error)
+int IBusFrontEnd::create_input_context (sd_bus_message *m, sd_bus_error *ret_error)
 {
     log_func();
 
-    String locale = "zh_TW.UTF-8"; //m_ic_manager.get_connection_locale (call_data->connect_id);
+    String locale = scim_get_current_locale ();
+    //String locale = m_ic_manager.get_connection_locale (call_data->connect_id);
     String language = scim_get_locale_language (locale);
     String encoding = scim_get_locale_encoding (locale);
 
-    SCIM_DEBUG_FRONTEND(2) << " IMS Create handler: Encoding=" << encoding << "\n";
+    log_debug("locale=%s, language=%s, encoding=%s",
+              locale.c_str(),
+              language.c_str(),
+              encoding.c_str());
+    SCIM_DEBUG_FRONTEND(2) << " IMS Create handler: Locale=" << locale
+                           << " Language=" << language
+                           << " Encoding=" << encoding << "\n";
 
     if (language.empty () || encoding.empty ())
         return 0;
@@ -534,20 +542,20 @@ int IBusFrontEnd::create_input_context(sd_bus_message *m, sd_bus_error *ret_erro
     }
 
     if (siid < 0) {
-//        SCIM_DEBUG_FRONTEND(2) << " IMS Create handler Failed: "
-//            << " Connect ID=" << call_data->connect_id  << "\n";
+        SCIM_DEBUG_FRONTEND(2) << " IMS Create handler Failed\n";
         return 0;
     }
 
     IBusInputContextPointer ic;
-    if (create_input_context(ic, siid) < 0) {
+    if (create_ic(ic, siid) < 0) {
         return -1;
     }
-
 //  uint32 attrs = m_ic_manager.create_ic (call_data, siid);
 //
 //  X11IC *ic = m_ic_manager.find_ic (call_data->icid);
-//
+
+  SCIM_DEBUG_FRONTEND(2) << " IMS Create handler OK: SIID="
+      << siid << " ICID = " << ic->get_id() << "\n";
 //  SCIM_DEBUG_FRONTEND(2) << " IMS Create handler OK: SIID="
 //      << siid << " ICID = " << ic->icid << " Connect ID=" << call_data->connect_id  << "\n";
 
@@ -561,33 +569,26 @@ int IBusFrontEnd::create_input_context(sd_bus_message *m, sd_bus_error *ret_erro
     m_panel_client.send ();
 
     if (m_shared_input_method) {
-//      ic->xims_on = m_config->read (String (SCIM_CONFIG_FRONTEND_IM_OPENED_BY_DEFAULT), ic->xims_on);
+        ic->set_on(m_config->read (String (SCIM_CONFIG_FRONTEND_IM_OPENED_BY_DEFAULT), ic->is_on()));
         ic->set_shared_siid(true);
-//      ic->shared_siid = true;
     }
 
-    if(sd_bus_reply_method_return(m, "o", ic->get_object_path().c_str())) {
-        return -1;
-    }
-
-    return 0;
+    return sd_bus_reply_method_return(m, "o", ic->get_object_path().c_str());
 }
 
-void IBusFrontEnd::destroy_input_context(int ic_id)
+void IBusFrontEnd::input_context_destroy (IBusInputContext *ic)
 {
     log_func();
 
-    IBusInputContextPointer ic = find_input_context(ic_id);
 //    X11IC *ic = m_ic_manager.find_ic (call_data->icid);
-    if(ic.null()) {
-        SCIM_DEBUG_FRONTEND(1) << "Cannot find IC for icid " << ic_id << "\n";
+    if(find_ic(ic->get_id()) == NULL) {
+        SCIM_DEBUG_FRONTEND(1) << "Cannot find IC for icid " << ic->get_id() << "\n";
         return;
     }
 
-//    SCIM_DEBUG_FRONTEND(2) << " IMS Destroy IC handler, ICID="
-//                    << call_data->icid << " Connect ID=" 
-//                    << call_data->connect_id << "\n";
-//
+    SCIM_DEBUG_FRONTEND(2) << " IMS Destroy IC handler, ICID="
+                    << ic->get_id() << "\n";
+
     m_panel_client.prepare (ic->get_id());
 
     if (is_focused_ic (ic)) {
@@ -611,12 +612,12 @@ void IBusFrontEnd::destroy_input_context(int ic_id)
     else
         m_focused_ic = old_focus;
 
-    m_id_ic_map.erase(ic_id);
+    m_id_ic_map.erase(ic->get_id());
 //    m_ic_manager.destroy_ic (call_data);
 }
 
 int
-IBusFrontEnd::panel_handle_io(sd_event_source *s, int fd, uint32_t revents)
+IBusFrontEnd::panel_handle_io (sd_event_source *s, int fd, uint32_t revents)
 {
     log_func();
 
@@ -961,6 +962,80 @@ IBusFrontEnd::filter_hotkeys (X11IC *ic, const KeyEvent &scimkey)
         }
         ok = true;
     }
+    return ok;
+}
+
+bool
+IBusFrontEnd::filter_hotkeys (IBusInputContext *ic, const KeyEvent &scimkey)
+{
+    log_func();
+
+    bool ok = false;
+
+    if (!is_focused_ic (ic)) return false;
+
+    m_frontend_hotkey_matcher.push_key_event (scimkey);
+    m_imengine_hotkey_matcher.push_key_event (scimkey);
+
+    FrontEndHotkeyAction hotkey_action = m_frontend_hotkey_matcher.get_match_result ();
+
+    // Match trigger and show factory menu hotkeys.
+    if (hotkey_action == SCIM_FRONTEND_HOTKEY_TRIGGER) {
+        if (!ic->is_on())
+            ims_turn_on_ic (ic);
+        else
+            ims_turn_off_ic (ic);
+        ok = true;
+    } else if (hotkey_action == SCIM_FRONTEND_HOTKEY_ON) {
+        if (!ic->is_on()) ims_turn_on_ic (ic);
+        ok = true;
+    } else if (hotkey_action == SCIM_FRONTEND_HOTKEY_OFF) {
+        if (ic->is_on()) ims_turn_off_ic (ic);
+        ok = true;
+    } else if (hotkey_action == SCIM_FRONTEND_HOTKEY_NEXT_FACTORY) {
+        String encoding = scim_get_locale_encoding (ic->get_locale());
+        String language = scim_get_locale_language (ic->get_locale());
+        String sfid = get_next_factory ("", encoding, get_instance_uuid (ic->get_siid()));
+        if (validate_factory (sfid, encoding)) {
+            ims_turn_off_ic (ic);
+            replace_instance (ic->get_siid(), sfid);
+            m_panel_client.register_input_context (ic->get_id(), get_instance_uuid (ic->get_siid()));
+            input_context_capability_updated (ic);
+            //set_default_factory (language, sfid);
+            ims_turn_on_ic (ic);
+        }
+        ok = true;
+    } else if (hotkey_action == SCIM_FRONTEND_HOTKEY_PREVIOUS_FACTORY) {
+        String encoding = scim_get_locale_encoding (ic->get_locale());
+        String language = scim_get_locale_language (ic->get_locale());
+        String sfid = get_previous_factory ("", encoding, get_instance_uuid (ic->get_siid()));
+        if (validate_factory (sfid, encoding)) {
+            ims_turn_off_ic (ic);
+            replace_instance (ic->get_siid(), sfid);
+            m_panel_client.register_input_context (ic->get_id(), get_instance_uuid (ic->get_siid()));
+            input_context_capability_updated (ic);
+            //set_default_factory (language, sfid);
+            ims_turn_on_ic (ic);
+        }
+        ok = true;
+    } else if (hotkey_action == SCIM_FRONTEND_HOTKEY_SHOW_FACTORY_MENU) {
+        panel_req_show_factory_menu (ic);
+        ok = true;
+    } else if (m_imengine_hotkey_matcher.is_matched ()) {
+        String encoding = scim_get_locale_encoding (ic->get_locale());
+        String language = scim_get_locale_language (ic->get_locale());
+        String sfid = m_imengine_hotkey_matcher.get_match_result ();
+        if (validate_factory (sfid, encoding)) {
+            ims_turn_off_ic (ic); 
+            replace_instance (ic->get_siid(), sfid);
+            m_panel_client.register_input_context (ic->get_id(), get_instance_uuid (ic->get_siid()));
+            //input_context_capability_updated (ic->get_id());
+            set_default_factory (language, sfid);
+            ims_turn_on_ic (ic);
+        }
+        ok = true;
+    }
+
     return ok;
 }
 
@@ -1460,6 +1535,13 @@ IBusFrontEnd::ims_is_preedit_callback_mode (const X11IC *ic)
     return validate_ic (ic) && (ic->input_style & XIMPreeditCallbacks);
 }
 
+bool IBusFrontEnd::ims_is_preedit_callback_mode (IBusInputContext *ic)
+{
+    log_func();
+
+    return validate_ic (ic) && !ic->is_client_commit_preedit();
+}
+
 void
 IBusFrontEnd::ims_preedit_callback_start (X11IC *ic)
 {
@@ -1478,6 +1560,28 @@ IBusFrontEnd::ims_preedit_callback_start (X11IC *ic)
     pcb.icid              = ic->icid;
     pcb.todo.return_value = 0;
     IMCallCallback (m_xims, (XPointer) & pcb);
+}
+
+void
+IBusFrontEnd::ims_preedit_callback_start (IBusInputContext *ic)
+{
+    log_func_incomplete();
+
+    if (!validate_ic (ic) || ic->is_onspot_preedit_started()) return;
+
+    ic->set_onspot_preedit_started(true);
+
+    SCIM_DEBUG_FRONTEND(2) << " Onspot preedit start, ICID="
+            << ic->get_id() << "\n";
+
+    //IMPreeditCBStruct pcb;
+
+    //pcb.major_code        = XIM_PREEDIT_START;
+    //pcb.minor_code        = 0;
+    //pcb.connect_id        = ic->connect_id;
+    //pcb.icid              = ic->icid;
+    //pcb.todo.return_value = 0;
+    //IMCallCallback (m_xims, (XPointer) & pcb);
 }
 
 void
@@ -1501,6 +1605,31 @@ IBusFrontEnd::ims_preedit_callback_done (X11IC *ic)
     pcb.icid              = ic->icid;
     pcb.todo.return_value = 0;
     IMCallCallback (m_xims, (XPointer) & pcb);
+}
+
+void
+IBusFrontEnd::ims_preedit_callback_done (IBusInputContext *ic)
+{
+    log_func_incomplete();
+
+    if (!validate_ic (ic) || !ic->is_onspot_preedit_started()) return;
+
+    SCIM_DEBUG_FRONTEND(2) << " Onspot preedit done, ICID="
+            << ic->get_id() << "\n";
+
+    // First clear the preedit string.
+    //ims_preedit_callback_draw (ic, WideString ());
+
+    ic->set_onspot_preedit_started(false);
+
+    //IMPreeditCBStruct pcb;
+
+    //pcb.major_code        = XIM_PREEDIT_DONE;
+    //pcb.minor_code        = 0;
+    //pcb.connect_id        = ic->connect_id;
+    //pcb.icid              = ic->icid;
+    //pcb.todo.return_value = 0;
+    //IMCallCallback (m_xims, (XPointer) & pcb);
 }
 
 void
@@ -1603,6 +1732,32 @@ IBusFrontEnd::ims_preedit_callback_caret (X11IC *ic, int caret)
     IMCallCallback (m_xims, (XPointer) & pcb);
 }
 
+void
+IBusFrontEnd::ims_preedit_callback_caret (IBusInputContext *ic, int caret)
+{
+    log_func_incomplete();
+
+    if (!validate_ic (ic) || !ic->is_onspot_preedit_started() || caret > ic->get_onspot_preedit_length() || caret < 0)
+        return;
+
+    SCIM_DEBUG_FRONTEND(2) << " Onspot preedit caret, ICID="
+            << ic->get_id() << "\n";
+
+    //save the caret position for future usage when updating preedit string.
+    ic->set_onspot_caret(caret);
+
+//    //client usually does not support this callback
+//    IMPreeditCBStruct pcb;
+//
+//    pcb.major_code = XIM_PREEDIT_CARET;
+//    pcb.connect_id = ic->connect_id;
+//    pcb.icid       = ic->icid;
+//    pcb.todo.caret.direction = XIMAbsolutePosition;
+//    pcb.todo.caret.position = caret;
+//    pcb.todo.caret.style = XIMIsPrimary;
+//    IMCallCallback (m_xims, (XPointer) & pcb);
+}
+
 bool
 IBusFrontEnd::ims_string_conversion_callback_retrieval (X11IC *ic, WideString &text, int &cursor, int maxlen_before, int maxlen_after)
 {
@@ -1698,12 +1853,52 @@ IBusFrontEnd::ims_turn_on_ic (X11IC *ic)
 }
 
 void
+IBusFrontEnd::ims_turn_on_ic (IBusInputContext *ic)
+{
+    log_func();
+
+    if (validate_ic (ic) && !ic->is_on()) {
+        SCIM_DEBUG_FRONTEND(2) << "ims_turn_on_ic.\n";
+
+        ic->set_on(true);
+
+        //Record the IC on/off status
+        if (m_shared_input_method)
+            m_config->write (String (SCIM_CONFIG_FRONTEND_IM_OPENED_BY_DEFAULT), true);
+
+        if (is_focused_ic (ic)) {
+            panel_req_focus_in (ic);
+            start_ic (ic);
+        }
+    }
+}
+
+void
 IBusFrontEnd::ims_turn_off_ic (X11IC *ic)
 {
     if (validate_ic (ic) && ic->xims_on) {
         SCIM_DEBUG_FRONTEND(2) << "ims_turn_off_ic.\n";
 
         ic->xims_on = false;
+
+        //Record the IC on/off status
+        if (m_shared_input_method)
+            m_config->write (String (SCIM_CONFIG_FRONTEND_IM_OPENED_BY_DEFAULT), false);
+
+        if (is_focused_ic (ic))
+            stop_ic (ic);
+    }
+}
+
+void
+IBusFrontEnd::ims_turn_off_ic (IBusInputContext *ic)
+{
+    log_func();
+
+    if (validate_ic (ic) && ic->is_on()) {
+        SCIM_DEBUG_FRONTEND(2) << "ims_turn_off_ic.\n";
+
+        ic->set_on(false);
 
         //Record the IC on/off status
         if (m_shared_input_method)
@@ -1743,6 +1938,203 @@ IBusFrontEnd::set_ic_capabilities (const X11IC *ic)
 }
 
 void
+IBusFrontEnd::input_context_capability_updated (IBusInputContext *ic)
+{
+    log_func();
+
+    if (validate_ic (ic)) {
+        unsigned int cap = SCIM_CLIENT_CAP_ALL_CAPABILITIES - SCIM_CLIENT_CAP_SURROUNDING_TEXT;
+
+        if (ic->is_client_commit_preedit())
+            cap -= SCIM_CLIENT_CAP_ONTHESPOT_PREEDIT;
+
+        update_client_capabilities (ic->get_siid(), cap);
+    }
+}
+
+void
+IBusFrontEnd::input_context_focus_in (IBusInputContext *ic)
+{
+    log_func();
+
+    SCIM_DEBUG_FRONTEND(2) << " IMS Set IC focus handler, ID="
+                    << ic->get_id() << "\n";
+    
+//    X11IC *ic =m_ic_manager.find_ic (call_data->icid);
+//
+    if (find_ic(ic->get_id()) == NULL) {
+        SCIM_DEBUG_FRONTEND(1) << "Cannot find IC for icid " << ic->get_id() << "\n";
+        return;
+    }
+//    if (!validate_ic (ic)) {
+//        SCIM_DEBUG_FRONTEND(1) << "Cannot find IC for icid " << call_data->icid << "\n";
+//        return 0;
+//    }
+
+    if (validate_ic (m_focused_ic) && m_focused_ic->get_id() != ic->get_id()) {
+        m_panel_client.prepare (m_focused_ic->get_id());
+        stop_ic (m_focused_ic);
+        m_panel_client.focus_out (m_focused_ic->get_id());
+        m_panel_client.send ();
+    }
+
+    String encoding = scim_get_locale_encoding (ic->get_locale());
+    String language = scim_get_locale_language (ic->get_locale());
+    bool need_reg = false;
+    bool need_cap = false;
+    bool need_reset = false;
+
+    m_focused_ic = ic;
+
+    m_panel_client.prepare (ic->get_id());
+
+    if (m_shared_input_method) {
+        SCIM_DEBUG_FRONTEND(3) << "Shared input method.\n";
+
+        if (!ic->is_shared_siid()) {
+            delete_instance (ic->get_siid());
+            ic->set_shared_siid(true);
+        }
+
+        ic->set_siid(get_default_instance (language, encoding));
+        ic->set_onspot_preedit_started(false);
+        ic->set_onspot_preedit_length(0);
+        ic->set_onspot_caret(0);
+
+        ic->set_on(m_config->read (String (SCIM_CONFIG_FRONTEND_IM_OPENED_BY_DEFAULT), ic->is_on()));
+
+        need_reg = true;
+        need_cap = true;
+        need_reset = true;
+    } else if (ic->is_shared_siid()) {
+        String sfid = get_default_factory (language, encoding);
+        ic->set_siid(new_instance (sfid, encoding));
+        ic->set_onspot_preedit_started(false);
+        ic->set_onspot_preedit_length(0);
+        ic->set_onspot_caret(0);
+        ic->set_shared_siid(false);
+        need_reg = true;
+        need_cap = true;
+    }
+
+    panel_req_focus_in (ic);
+
+    if (need_reset) reset (ic->get_siid());
+    if (need_cap) input_context_capability_updated (ic);
+    if (need_reg) m_panel_client.register_input_context (ic->get_id(), get_instance_uuid (ic->get_siid()));
+
+    if (ic->is_on()) {
+        start_ic (ic);
+    } else {
+    	panel_req_update_factory_info (ic);
+        m_panel_client.turn_off (ic->get_id());
+    }
+
+    m_panel_client.send ();
+}
+
+void
+IBusFrontEnd::input_context_focus_out (IBusInputContext *ic)
+{
+    log_func_not_impl();
+
+    if (!validate_ic (ic)) {
+        SCIM_DEBUG_FRONTEND(1) << "Cannot find IC for icid " << ic->get_id() << "\n";
+        return;
+    }
+}
+
+void
+IBusFrontEnd::input_context_reset (IBusInputContext *ic)
+{
+    log_func_not_impl();
+
+    if (!validate_ic (ic)) {
+        SCIM_DEBUG_FRONTEND(1) << "Cannot find IC for icid " << ic->get_id() << "\n";
+        return;
+    }
+}
+
+void
+IBusFrontEnd::input_context_cursor_location_updated(IBusInputContext *ic)
+{
+    log_func_not_impl();
+
+    if (!validate_ic (ic)) {
+        SCIM_DEBUG_FRONTEND(1) << "Cannot find IC for icid " << ic->get_id() << "\n";
+        return;
+    }
+}
+
+bool
+IBusFrontEnd::input_context_process_key_event(IBusInputContext *ic,
+                                              uint32_t keyval,
+                                              uint32_t keycode,
+                                              uint32_t state)
+{
+    log_func();
+
+    SCIM_DEBUG_FRONTEND(2) << " IBus Forward event handler, ICID="
+                    << ic->get_id() << " Key Value="
+                    << keyval << " Key Code="
+                    << keycode << "Modifiers="
+                    << state << "\n";
+    
+    if (!validate_ic (ic)) {
+        SCIM_DEBUG_FRONTEND(1) << "Cannot find IC for icid " << ic->get_id() << "\n";
+        return 0;
+    }
+
+    // If the ic is not focused, then return.
+    if (!is_focused_ic (ic)) {
+        SCIM_DEBUG_FRONTEND(1) << "IC " << ic->get_id() << " is not focused, focus it first.\n";
+        return 0;
+    }
+
+//    XKeyEvent *event = (XKeyEvent*) &(call_data->event);
+    KeyEvent scimkey = scim_ibus_keyevent_to_scim (keyval, keycode, state);
+//    KeyEvent scimkey = scim_x11_keyevent_x11_to_scim (m_display, *event);
+
+    scimkey.mask  &= m_valid_key_mask;
+
+    // Set keyboard layout information.
+    scimkey.layout = m_keyboard_layout;
+
+    String scimkeystr;
+    scim_key_to_string(scimkeystr, scimkey);
+    log_debug("KeyEvent: %s", scimkeystr.c_str());
+    SCIM_DEBUG_FRONTEND(3)  << "  KeyEvent:" << scimkeystr << "\n";
+
+    m_panel_client.prepare (ic->get_id());
+
+    bool processed = false;
+    if (filter_hotkeys (ic, scimkey)) {
+        log_info("hot key processed");
+        processed = true;
+    }
+    else if (ic->is_on() && process_key_event (ic->get_siid(), scimkey)) {
+        log_info("key processed");
+        processed = true;
+    }
+    else if (m_fallback_instance->process_key_event (scimkey)) {
+        log_info("key processed by fallback instance");
+        processed = true;
+    }
+    else {
+        if (ic->notify_forward_key_event(keyval, keycode, state) < 0) {
+            log_info("failed to forward key event: %s", strerror(errno));
+        }
+        //IMForwardEvent (ims, (XPointer) call_data);
+    }
+
+    m_panel_client.send ();
+
+    log_debug("key processed=%s", processed ? "true" : "false");
+
+    return processed;
+}
+
+void
 IBusFrontEnd::start_ic (X11IC *ic)
 {
     if (validate_ic (ic)) {
@@ -1771,6 +2163,39 @@ IBusFrontEnd::start_ic (X11IC *ic)
 }
 
 void
+IBusFrontEnd::start_ic (IBusInputContext *ic)
+{
+    log_func();
+
+    if (validate_ic (ic)) {
+        if (ic->notify_show_preedit_text() < 0) {
+            log_info("failed to notify show preedit text: %s", strerror(errno));
+        }
+//      if (m_xims_dynamic) {
+//          IMPreeditStateStruct ips;
+//          ips.major_code = 0;
+//          ips.minor_code = 0;
+//          ips.icid = ic->icid;
+//          ips.connect_id = ic->connect_id;
+//          IMPreeditStart (m_xims, (XPointer) & ips);
+//      }
+
+        panel_req_update_screen (ic);
+        panel_req_update_spot_location (ic);
+        panel_req_update_factory_info (ic);
+
+        m_panel_client.turn_on (ic->get_id());
+        m_panel_client.hide_preedit_string (ic->get_id());
+        m_panel_client.hide_aux_string (ic->get_id());
+        m_panel_client.hide_lookup_table (ic->get_id());
+
+        if (ic->is_shared_siid()) reset (ic->get_siid());
+
+        focus_in (ic->get_siid());
+    }
+}
+
+void
 IBusFrontEnd::stop_ic (X11IC *ic)
 {
     if (validate_ic (ic)) {
@@ -1790,6 +2215,35 @@ IBusFrontEnd::stop_ic (X11IC *ic)
             ips.icid = ic->icid;
             ips.connect_id = ic->connect_id;
             IMPreeditEnd (m_xims, (XPointer) & ips);
+        }
+    }
+}
+
+void
+IBusFrontEnd::stop_ic (IBusInputContext *ic)
+{
+    log_func();
+
+    if (validate_ic (ic)) {
+        focus_out (ic->get_siid());
+        if (ic->is_shared_siid()) reset (ic->get_siid());
+
+        if (ims_is_preedit_callback_mode (ic))
+            ims_preedit_callback_done (ic);
+
+        panel_req_update_factory_info (ic);
+        m_panel_client.turn_off (ic->get_id());
+
+        //if (m_xims_dynamic) {
+        //    IMPreeditStateStruct ips;
+        //    ips.major_code = 0;
+        //    ips.minor_code = 0;
+        //    ips.icid = ic->icid;
+        //    ips.connect_id = ic->connect_id;
+        //    IMPreeditEnd (m_xims, (XPointer) & ips);
+        //}
+        if (ic->notify_hide_preedit_text() < 0) {
+            log_info("failed to notify hide preedit text: %s", strerror(errno));
         }
     }
 }
@@ -1876,18 +2330,22 @@ IBusFrontEnd::x_error_handler (Display *display, XErrorEvent *error)
 void
 IBusFrontEnd::panel_slot_reload_config (int context)
 {
+    log_func();
+
     m_config->reload ();
 }
-
 void
 IBusFrontEnd::panel_slot_exit (int context)
 {
+    log_func();
+
     sd_event_exit(m_loop, 0);
 }
-
 void
 IBusFrontEnd::panel_slot_update_lookup_table_page_size (int context, int page_size)
 {
+    log_func();
+
     X11IC *ic = m_ic_manager.find_ic (context);
     if (validate_ic (ic)) {
         m_panel_client.prepare (ic->icid);
@@ -1898,6 +2356,8 @@ IBusFrontEnd::panel_slot_update_lookup_table_page_size (int context, int page_si
 void
 IBusFrontEnd::panel_slot_lookup_table_page_up (int context)
 {
+    log_func();
+
     X11IC *ic = m_ic_manager.find_ic (context);
     if (validate_ic (ic)) {
         m_panel_client.prepare (ic->icid);
@@ -1908,6 +2368,8 @@ IBusFrontEnd::panel_slot_lookup_table_page_up (int context)
 void
 IBusFrontEnd::panel_slot_lookup_table_page_down (int context)
 {
+    log_func();
+
     X11IC *ic = m_ic_manager.find_ic (context);
     if (validate_ic (ic)) {
         m_panel_client.prepare (ic->icid);
@@ -1918,6 +2380,8 @@ IBusFrontEnd::panel_slot_lookup_table_page_down (int context)
 void
 IBusFrontEnd::panel_slot_trigger_property (int context, const String &property)
 {
+    log_func();
+
     X11IC *ic = m_ic_manager.find_ic (context);
     if (validate_ic (ic)) {
         m_panel_client.prepare (ic->icid);
@@ -1928,6 +2392,8 @@ IBusFrontEnd::panel_slot_trigger_property (int context, const String &property)
 void
 IBusFrontEnd::panel_slot_process_helper_event (int context, const String &target_uuid, const String &helper_uuid, const Transaction &trans)
 {
+    log_func();
+
     X11IC *ic = m_ic_manager.find_ic (context);
     if (validate_ic (ic) && get_instance_uuid (ic->siid) == target_uuid) {
         m_panel_client.prepare (ic->icid);
@@ -1938,6 +2404,8 @@ IBusFrontEnd::panel_slot_process_helper_event (int context, const String &target
 void
 IBusFrontEnd::panel_slot_move_preedit_caret (int context, int caret_pos)
 {
+    log_func();
+
     X11IC *ic = m_ic_manager.find_ic (context);
     if (validate_ic (ic)) {
         m_panel_client.prepare (ic->icid);
@@ -1948,6 +2416,8 @@ IBusFrontEnd::panel_slot_move_preedit_caret (int context, int caret_pos)
 void
 IBusFrontEnd::panel_slot_select_candidate (int context, int cand_index)
 {
+    log_func();
+
     X11IC *ic = m_ic_manager.find_ic (context);
     if (validate_ic (ic)) {
         m_panel_client.prepare (ic->icid);
@@ -1955,42 +2425,111 @@ IBusFrontEnd::panel_slot_select_candidate (int context, int cand_index)
         m_panel_client.send ();
     }
 }
+//void
+//IBusFrontEnd::panel_slot_process_key_event (int context, const KeyEvent &key)
+//{
+//    log_func();
+//
+//    X11IC *ic = m_ic_manager.find_ic (context);
+//    if (validate_ic (ic)) {
+//        m_panel_client.prepare (ic->icid);
+//
+//        if (!filter_hotkeys (ic, key)) {
+//            if (!ic->xims_on || !process_key_event (ic->siid, key)) {
+//                if (!m_fallback_instance->process_key_event (key))
+//                    ims_forward_key_event (ic, key);
+//            }
+//        }
+//
+//        m_panel_client.send ();
+//    }
+//}
 void
 IBusFrontEnd::panel_slot_process_key_event (int context, const KeyEvent &key)
 {
-    X11IC *ic = m_ic_manager.find_ic (context);
-    if (validate_ic (ic)) {
-        m_panel_client.prepare (ic->icid);
+    log_func();
 
-        if (!filter_hotkeys (ic, key)) {
-            if (!ic->xims_on || !process_key_event (ic->siid, key)) {
-                if (!m_fallback_instance->process_key_event (key))
-                    ims_forward_key_event (ic, key);
+    IBusInputContext *ic = find_ic (context);
+    if (!validate_ic (ic)) {
+        return;
+    }
+
+    m_panel_client.prepare (ic->get_id());
+
+    if (!filter_hotkeys (ic, key)) {
+        if (!ic->is_on() || !process_key_event (ic->get_siid(), key)) {
+            if (!m_fallback_instance->process_key_event (key)) {
+                if (log_level_enabled(LOG_LEVEL_DEBUG)) {
+                    String keystr;
+                    KeyEvent tmp = key;
+                    scim_key_to_string(keystr, tmp);
+                    log_debug("forward key event: %s", keystr.c_str());
+                }
+                if (ic->notify_forward_key_event(0, key.code, key.mask) < 0) {
+                    log_info("failed to notify forward key event: %s", strerror(errno));
+                }
+//              ims_forward_key_event (ic, key);
             }
         }
-
-        m_panel_client.send ();
     }
+
+    m_panel_client.send ();
 }
+//void
+//IBusFrontEnd::panel_slot_commit_string (int context, const WideString &wstr)
+//{
+//    log_func();
+//
+//    X11IC *ic = m_ic_manager.find_ic (context);
+//    if (validate_ic (ic)) {
+//        ims_commit_string (ic, wstr);
+//    }
+//}
 void
 IBusFrontEnd::panel_slot_commit_string (int context, const WideString &wstr)
 {
-    X11IC *ic = m_ic_manager.find_ic (context);
-    if (validate_ic (ic)) {
-        ims_commit_string (ic, wstr);
+    log_func();
+
+    IBusInputContext *ic = find_ic (context);
+    if (!validate_ic (ic)) {
+        return;
     }
+
+    if (ic->notify_commit_text(utf8_wcstombs(wstr).c_str())) {
+        log_info("failed to notify commit text: %s", strerror(errno));
+    }
+//    ims_commit_string (ic, wstr);
 }
+//void
+//IBusFrontEnd::panel_slot_forward_key_event (int context, const KeyEvent &key)
+//{
+//    log_func();
+//
+//    X11IC *ic = m_ic_manager.find_ic (context);
+//    if (validate_ic (ic)) {
+//        ims_forward_key_event (ic, key);
+//    }
+//}
 void
 IBusFrontEnd::panel_slot_forward_key_event (int context, const KeyEvent &key)
 {
-    X11IC *ic = m_ic_manager.find_ic (context);
+    log_func();
+
+    IBusInputContext *ic = find_ic (context);
     if (validate_ic (ic)) {
-        ims_forward_key_event (ic, key);
+        // TODO convert key.mask to IBusModifierType
+        // TODO convert keyval
+        if (ic->notify_forward_key_event(0, key.code, key.mask) < 0) {
+            log_info("failed to notify forward key event: %s", strerror(errno));
+        }
+//      ims_forward_key_event (ic, key);
     }
 }
 void
 IBusFrontEnd::panel_slot_request_help (int context)
 {
+    log_func();
+
     X11IC *ic = m_ic_manager.find_ic (context);
     if (validate_ic (ic)) {
         m_panel_client.prepare (ic->icid);
@@ -2001,6 +2540,8 @@ IBusFrontEnd::panel_slot_request_help (int context)
 void
 IBusFrontEnd::panel_slot_request_factory_menu (int context)
 {
+    log_func();
+
     X11IC *ic = m_ic_manager.find_ic (context);
     if (validate_ic (ic)) {
         m_panel_client.prepare (ic->icid);
@@ -2011,6 +2552,8 @@ IBusFrontEnd::panel_slot_request_factory_menu (int context)
 void
 IBusFrontEnd::panel_slot_change_factory (int context, const String &uuid)
 {
+    log_func();
+
     SCIM_DEBUG_FRONTEND (1) << "panel_slot_change_factory " << uuid << "\n";
 
     X11IC *ic = m_ic_manager.find_ic (context);
@@ -2042,6 +2585,8 @@ IBusFrontEnd::panel_slot_change_factory (int context, const String &uuid)
 void
 IBusFrontEnd::panel_req_update_screen (const X11IC *ic)
 {
+    log_func();
+
     Window target = ic->focus_win ? ic->focus_win : ic->client_win;
     XWindowAttributes xwa;
     if (target && 
@@ -2056,6 +2601,27 @@ IBusFrontEnd::panel_req_update_screen (const X11IC *ic)
             }
         }
     }
+}
+
+void
+IBusFrontEnd::panel_req_update_screen (IBusInputContext *ic)
+{
+    log_func_cant_mapped();
+
+//    Window target = ic->focus_win ? ic->focus_win : ic->client_win;
+//    XWindowAttributes xwa;
+//    if (target && 
+//        XGetWindowAttributes (m_display, target, &xwa) &&
+//        validate_ic (ic)) {
+//        int num = ScreenCount (m_display);
+//        int idx;
+//        for (idx = 0; idx < num; ++ idx) {
+//            if (ScreenOfDisplay (m_display, idx) == xwa.screen) {
+//                m_panel_client.update_screen (ic->icid, idx);
+//                return;
+//            }
+//        }
+//    }
 }
 
 void
@@ -2102,9 +2668,36 @@ IBusFrontEnd::panel_req_show_factory_menu (const X11IC *ic)
 }
 
 void
+IBusFrontEnd::panel_req_show_factory_menu (IBusInputContext *ic)
+{
+    log_func();
+
+    std::vector<String> uuids;
+    if (get_factory_list_for_encoding (uuids, ic->get_encoding())) {
+        std::vector <PanelFactoryInfo> menu;
+        for (size_t i = 0; i < uuids.size (); ++ i) {
+            menu.push_back (PanelFactoryInfo (
+                                    uuids [i],
+                                    utf8_wcstombs (get_factory_name (uuids [i])),
+                                    get_factory_language (uuids [i]),
+                                    get_factory_icon_file (uuids [i])));
+        }
+        m_panel_client.show_factory_menu (ic->get_id(), menu);
+    }
+}
+
+void
 IBusFrontEnd::panel_req_focus_in (const X11IC * ic)
 {
     m_panel_client.focus_in (ic->icid, get_instance_uuid (ic->siid));
+}
+
+void
+IBusFrontEnd::panel_req_focus_in (IBusInputContext *ic)
+{
+    log_func();
+
+    m_panel_client.focus_in (ic->get_id(), get_instance_uuid (ic->get_siid()));
 }
 
 void
@@ -2119,6 +2712,23 @@ IBusFrontEnd::panel_req_update_factory_info (const X11IC *ic)
             info = PanelFactoryInfo (String (""), String (_("English/Keyboard")), String ("C"), String (SCIM_KEYBOARD_ICON_FILE));
         }
         m_panel_client.update_factory_info (ic->icid, info);
+    }
+}
+
+void
+IBusFrontEnd::panel_req_update_factory_info (IBusInputContext *ic)
+{
+    log_func();
+
+    if (is_focused_ic (ic)) {
+        PanelFactoryInfo info;
+        if (ic->is_on()) {
+            String uuid = get_instance_uuid (ic->get_siid());
+            info = PanelFactoryInfo (uuid, utf8_wcstombs (get_factory_name (uuid)), get_factory_language (uuid), get_factory_icon_file (uuid));
+        } else {
+            info = PanelFactoryInfo (String (""), String (_("English/Keyboard")), String ("C"), String (SCIM_KEYBOARD_ICON_FILE));
+        }
+        m_panel_client.update_factory_info (ic->get_id(), info);
     }
 }
 
@@ -2150,6 +2760,21 @@ IBusFrontEnd::panel_req_update_spot_location (const X11IC *ic)
                 &spot_x, &spot_y, &child);
         }
         m_panel_client.update_spot_location (ic->icid, spot_x, spot_y);
+    }
+}
+
+void
+IBusFrontEnd::panel_req_update_spot_location (IBusInputContext *ic)
+{
+    log_func ();
+
+    if (validate_ic (ic)) {
+        log_debug ("update panel location: x=%d, y=%d",
+                   ic->get_cursor_location().x,
+                   ic->get_cursor_location().y);
+        m_panel_client.update_spot_location (ic->get_id(),
+                                             ic->get_cursor_location().x,
+                                             ic->get_cursor_location().y);
     }
 }
 

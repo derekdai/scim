@@ -34,7 +34,7 @@
 
 using namespace scim;
 
-class IBusFrontEnd : public FrontEndBase, private IBusPortal
+class IBusFrontEnd : public FrontEndBase, private IBusInputContextObserver
 {
 // first = UUID.
 // second= siid.
@@ -140,6 +140,7 @@ private:
     KeyEvent keyevent_ibus_to_scim (const XKeyEvent& key);
 
     bool filter_hotkeys                 (X11IC *ic, const KeyEvent &key);
+    bool filter_hotkeys                 (IBusInputContext *ic, const KeyEvent &key);
 
     int ims_open_handler                (XIMS ims, IMOpenStruct *call_data);
     int ims_close_handler               (XIMS ims, IMCloseStruct *call_data);
@@ -165,12 +166,18 @@ private:
     void ims_preedit_callback_done (X11IC *ic);
     void ims_preedit_callback_draw (X11IC *ic, const WideString& str, const AttributeList & attrs = AttributeList ());
     void ims_preedit_callback_caret (X11IC *ic, int caret);
+    bool ims_is_preedit_callback_mode (IBusInputContext *ic);
+    void ims_preedit_callback_start (IBusInputContext *ic);
+    void ims_preedit_callback_done (IBusInputContext *ic);
+    void ims_preedit_callback_caret (IBusInputContext *ic, int caret);
 
     bool ims_string_conversion_callback_retrieval (X11IC *ic, WideString &text, int &cursor, int maxlen_before, int maxlen_after); 
     bool ims_string_conversion_callback_substitution (X11IC *ic, int offset, int len); 
 
     void ims_turn_on_ic (X11IC *ic);
     void ims_turn_off_ic (X11IC *ic);
+    void ims_turn_on_ic (IBusInputContext *ic);
+    void ims_turn_off_ic (IBusInputContext *ic);
 
     void ims_sync_ic (X11IC *ic);
 
@@ -178,6 +185,8 @@ private:
 
     void start_ic (X11IC *ic);
     void stop_ic (X11IC *ic);
+    void start_ic (IBusInputContext *ic);
+    void stop_ic (IBusInputContext *ic);
 
     bool is_focused_ic    (int siid) { return validate_ic (m_focus_ic) && m_focus_ic->siid == siid; }
     bool is_inputing_ic   (int siid) { return is_focused_ic (siid) && m_focus_ic->xims_on; }
@@ -218,22 +227,38 @@ private:
     void panel_req_update_factory_info (const X11IC *ic);
     void panel_req_update_spot_location (const X11IC *ic);
 
+    void panel_req_update_screen (IBusInputContext *ic);
+    void panel_req_show_help (IBusInputContext *ic);
+    void panel_req_show_factory_menu (IBusInputContext *ic);
+    void panel_req_focus_in (IBusInputContext *ic);
+    void panel_req_update_factory_info (IBusInputContext *ic);
+    void panel_req_update_spot_location (IBusInputContext *ic);
+
     void reload_config_callback (const ConfigPointer &config);
 
     void fallback_commit_string_cb (IMEngineInstanceBase * si, const WideString & str);
 
-    int panel_connect();
-    void panel_disconnect();
-    int panel_handle_io(sd_event_source *s, int fd, uint32_t revents);
+    int panel_connect ();
+    void panel_disconnect ();
+    int panel_handle_io (sd_event_source *s, int fd, uint32_t revents);
 
-    int create_input_context(IBusInputContextPointer &out, int siid);
-    IBusInputContextPointer find_input_context(int ic_id);
-    void destroy_input_context(int ic_id);
+    int next_ic_id ();
+    int create_ic (IBusInputContextPointer &out, int siid);
+    IBusInputContext *find_ic (int ic_id);
 
-    int next_ic_id();
-    int create_input_context(sd_bus_message *m, sd_bus_error *ret_error);
+    virtual void input_context_destroy (IBusInputContext *ic);
+    virtual void input_context_capability_updated (IBusInputContext *ic);
+    virtual void input_context_focus_in (IBusInputContext *ic);
+    virtual void input_context_focus_out (IBusInputContext *ic);
+    virtual void input_context_reset (IBusInputContext *ic);
+    virtual void input_context_cursor_location_updated(IBusInputContext *ic);
+    virtual bool input_context_process_key_event (IBusInputContext *ic,
+                                                  uint32_t keyval,
+                                                  uint32_t keycode,
+                                                  uint32_t state);
+    int create_input_context (sd_bus_message *m, sd_bus_error *ret_error);
 
-    bool is_focused_ic (IBusInputContextPointer ic) { return !m_focused_ic.null() && !ic.null() && m_focused_ic->get_id() == ic->get_id(); }
+    bool is_focused_ic (IBusInputContext *ic) { return m_focused_ic != NULL && ic != NULL && m_focused_ic->get_id() == ic->get_id(); }
 
 private:
     static int ims_protocol_handler (XIMS ims, IMProtocol *call_data);
@@ -241,6 +266,7 @@ private:
     static int  x_error_handler (Display *display, XErrorEvent *error);
 
     static bool validate_ic (const X11IC * ic) { return ic && ic->icid > 0 && ic->siid >= 0; }
+    static bool validate_ic (IBusInputContext *ic) { return ic != NULL && ic->get_id() > 0 && ic->get_siid() >= 0; }
 };
 
 #endif
