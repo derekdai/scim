@@ -1,4 +1,4 @@
-/** @file scim_ibus_frontend.cpp
+/** @file scim_socket_frontend.cpp
  * implementation of class IBusFrontEnd.
  */
 
@@ -23,60 +23,38 @@
  * Free Software Foundation, Inc., 59 Temple Place, Suite 330,
  * Boston, MA  02111-1307  USA
  *
- * $Id: scim_ibus_frontend.cpp,v 1.179.2.6 2007/06/16 06:23:38 suzhe Exp $
+ * $Id: scim_socket_frontend.cpp,v 1.37 2005/07/03 08:36:42 suzhe Exp $
  *
  */
 
 #define Uses_SCIM_CONFIG_PATH
 #define Uses_SCIM_FRONTEND
-#define Uses_SCIM_ICONV
-#define Uses_SCIM_SOCKET
+#define Uses_SCIM_IBUS
 #define Uses_SCIM_TRANSACTION
-#define Uses_SCIM_HOTKEY
-#define Uses_SCIM_PANEL_CLIENT
-#define Uses_C_LOCALE
+#define Uses_STL_UTILITY
 #define Uses_C_STDIO
 #define Uses_C_STDLIB
 
-#include <sstream>
-#include <sys/types.h>
-#include <sys/wait.h>
-#include <unistd.h>
-#include <errno.h>
+#include <sys/time.h>
+#include <limits.h>
 #include <systemd/sd-event.h>
 #include <systemd/sd-bus.h>
-#include <X11/Xproto.h>
-#include <X11/Xlib.h>
-#include <X11/keysym.h>
-#include <X11/Xutil.h>
-#include "IMdkit/IMdkit.h"
-#include "IMdkit/Xi18n.h"
-
 #include "scim_private.h"
 #include "scim.h"
-
-#include "scim_ibus_types.h"
-#include "scim_ibus_utils.h"
-#include "scim_ibus_ic.h"
-#include "scim_x11_ic.h"
-#include "scim_x11_utils.h"
 #include "scim_ibus_frontend.h"
+#include "scim_ibus_utils.h"
 
 #define scim_module_init ibus_LTX_scim_module_init
 #define scim_module_exit ibus_LTX_scim_module_exit
 #define scim_frontend_module_init ibus_LTX_scim_frontend_module_init
 #define scim_frontend_module_run ibus_LTX_scim_frontend_module_run
 
-#define SCIM_CONFIG_FRONTEND_IBUS_BROKEN_WCHAR    "/FrontEnd/IBus/BrokenWchar"
-#define SCIM_CONFIG_FRONTEND_IBUS_DYNAMIC         "/FrontEnd/IBus/Dynamic"
-#define SCIM_CONFIG_FRONTEND_IBUS_SERVER_NAME     "/FrontEnd/IBus/ServerName"
-#define SCIM_CONFIG_FRONTEND_IBUS_ONTHESPOT       "/FrontEnd/IBus/OnTheSpot"
+#define SCIM_CONFIG_FRONTEND_IBUS_CONFIG_READONLY    "/FrontEnd/IBus/ConfigReadOnly"
+#define SCIM_CONFIG_FRONTEND_IBUS_MAXCLIENTS        "/FrontEnd/IBus/MaxClients"
 
 #define IBUS_PORTAL_SERVICE                       "org.freedesktop.portal.IBus"
 #define IBUS_PORTAL_OBJECT_PATH                   "/org/freedesktop/IBus"
 #define IBUS_PORTAL_INTERFACE                     "org.freedesktop.IBus.Portal"
-
-#define SCIM_KEYBOARD_ICON_FILE            (SCIM_ICONDIR "/keyboard.png")
 
 using namespace scim;
 
@@ -87,16 +65,216 @@ ibus_frontend_message_adapter(sd_bus_message *m, void *userdata, sd_bus_error *r
     return sd_bus_message_adapter<IBusFrontEnd, mf>(m, userdata, ret_error);
 }
 
-//Local static data
+template<int (IBusFrontEnd::*mf) (sd_bus *bus,
+ 	                              const char *path,
+ 	                              const char *interface,
+ 	                              const char *property,
+ 	                              sd_bus_message *value,
+ 	                              sd_bus_error *ret_error)>
+int
+ibus_frontend_prop_adapter (sd_bus *bus,
+ 	                        const char *path,
+ 	                        const char *interface,
+ 	                        const char *property,
+ 	                        sd_bus_message *value,
+ 	                        void *userdata,
+ 	                        sd_bus_error *ret_error)
+{
+    return sd_bus_prop_adapter<IBusFrontEnd, mf> (bus,
+                                                      path,
+                                                      interface,
+                                                      property,
+                                                      value,
+                                                      userdata,
+                                                      ret_error);
+}
+
 static Pointer <IBusFrontEnd> _scim_frontend (0);
+
+static int _argc;
+static char **_argv;
 
 const sd_bus_vtable IBusFrontEnd::m_portal_vtbl[] = {
     SD_BUS_VTABLE_START(0),
     SD_BUS_METHOD_WITH_NAMES(
-            "CreateInputContext",
+            "CreateFrontEnd",
             "s", SD_BUS_PARAM(client_name),
             "o", SD_BUS_PARAM(object_path),
-            (&ibus_frontend_message_adapter<&IBusFrontEnd::create_input_context>),
+            (&ibus_frontend_message_adapter<&IBusFrontEnd::portal_create_ctx>),
+            SD_BUS_VTABLE_UNPRIVILEGED),
+    SD_BUS_VTABLE_END,
+};
+
+const sd_bus_vtable IBusFrontEnd::m_inputcontext_vtbl[] = {
+    SD_BUS_VTABLE_START(0),
+    SD_BUS_METHOD_WITH_NAMES(
+            "ProcessKeyEvent",
+            "uuu", SD_BUS_PARAM(keyval) SD_BUS_PARAM(keycode) SD_BUS_PARAM(state),
+            "b", SD_BUS_PARAM(handled),
+            (&ibus_frontend_message_adapter<&IBusFrontEnd::ctx_process_key_event>),
+            SD_BUS_VTABLE_UNPRIVILEGED),
+    SD_BUS_METHOD_WITH_NAMES(
+            "SetCursorLocation",
+            "iiii", SD_BUS_PARAM(x) SD_BUS_PARAM(y) SD_BUS_PARAM(w) SD_BUS_PARAM(h),
+            "", SD_BUS_PARAM(),
+            (&ibus_frontend_message_adapter<&IBusFrontEnd::ctx_set_cursor_location>),
+            SD_BUS_VTABLE_UNPRIVILEGED),
+    SD_BUS_METHOD_WITH_NAMES(
+            "SetCursorLocationRelative",
+            "iiii", SD_BUS_PARAM(x) SD_BUS_PARAM(y) SD_BUS_PARAM(w) SD_BUS_PARAM(h),
+            "", SD_BUS_PARAM(),
+            (&ibus_frontend_message_adapter<&IBusFrontEnd::ctx_set_cursor_location_relative>),
+            SD_BUS_VTABLE_UNPRIVILEGED),
+    SD_BUS_METHOD_WITH_NAMES(
+            "ProcessHandWritingEvent",
+            "ad", SD_BUS_PARAM(coordinates),
+            "", SD_BUS_PARAM(),
+            (&ibus_frontend_message_adapter<&IBusFrontEnd::ctx_process_hand_writing_event>),
+            SD_BUS_VTABLE_UNPRIVILEGED),
+    SD_BUS_METHOD_WITH_NAMES(
+            "CancelHandWriting",
+            "u", SD_BUS_PARAM(n_strokes),
+            "", SD_BUS_PARAM(),
+            (&ibus_frontend_message_adapter<&IBusFrontEnd::ctx_cancel_hand_writing>),
+            SD_BUS_VTABLE_UNPRIVILEGED),
+    SD_BUS_METHOD(
+            "FocusIn", "", "",
+            (&ibus_frontend_message_adapter<&IBusFrontEnd::ctx_focus_in>),
+            SD_BUS_VTABLE_UNPRIVILEGED),
+    SD_BUS_METHOD(
+            "FocusOut", "", "",
+            (&ibus_frontend_message_adapter<&IBusFrontEnd::ctx_focus_out>),
+            SD_BUS_VTABLE_UNPRIVILEGED),
+    SD_BUS_METHOD(
+            "Reset", "", "",
+            (&ibus_frontend_message_adapter<&IBusFrontEnd::ctx_reset>),
+            SD_BUS_VTABLE_UNPRIVILEGED),
+    SD_BUS_METHOD_WITH_NAMES(
+            "SetCapabilities",
+            "u", SD_BUS_PARAM(caps),
+            "", SD_BUS_PARAM(),
+            (&ibus_frontend_message_adapter<&IBusFrontEnd::ctx_set_capabilities>),
+            SD_BUS_VTABLE_UNPRIVILEGED),
+    SD_BUS_METHOD_WITH_NAMES(
+            "PropertyActivate",
+            "su", SD_BUS_PARAM(name) SD_BUS_PARAM(state),
+            "", SD_BUS_PARAM(),
+            (&ibus_frontend_message_adapter<&IBusFrontEnd::ctx_property_activate>),
+            SD_BUS_VTABLE_UNPRIVILEGED),
+    SD_BUS_METHOD_WITH_NAMES(
+            "SetEngine",
+            "s", SD_BUS_PARAM(name),
+            "", SD_BUS_PARAM(),
+            (&ibus_frontend_message_adapter<&IBusFrontEnd::ctx_set_engine>),
+            SD_BUS_VTABLE_UNPRIVILEGED),
+    SD_BUS_METHOD_WITH_NAMES(
+            "GetEngine",
+            "", SD_BUS_PARAM(),
+            "v", SD_BUS_PARAM(desc),
+            (&ibus_frontend_message_adapter<&IBusFrontEnd::ctx_get_engine>),
+            SD_BUS_VTABLE_UNPRIVILEGED),
+    SD_BUS_METHOD_WITH_NAMES(
+            "SetSurroundingText",
+            "vuu", SD_BUS_PARAM(text) SD_BUS_PARAM(cursor_pos) SD_BUS_PARAM(anchor_pos),
+            "v", SD_BUS_PARAM(desc),
+            (&ibus_frontend_message_adapter<&IBusFrontEnd::ctx_set_surrounding_text>),
+            SD_BUS_VTABLE_UNPRIVILEGED),
+    SD_BUS_SIGNAL_WITH_NAMES(
+            "CommitText",
+            "v", SD_BUS_PARAM(text),
+            0),
+    SD_BUS_SIGNAL_WITH_NAMES(
+            "ForwardKeyEvent",
+            "uuu", SD_BUS_PARAM(keyval) SD_BUS_PARAM(keycode) SD_BUS_PARAM(state),
+            0),
+    SD_BUS_SIGNAL_WITH_NAMES(
+            "UpdatePreeditText",
+            "vub", SD_BUS_PARAM(text) SD_BUS_PARAM(cursor_pos) SD_BUS_PARAM(visible),
+            0),
+    SD_BUS_SIGNAL_WITH_NAMES(
+            "UpdatePreeditTextWithMode",
+            "vubu", SD_BUS_PARAM(text) SD_BUS_PARAM(cursor_pos) SD_BUS_PARAM(visible) SD_BUS_PARAM(mode),
+            0),
+    SD_BUS_SIGNAL_WITH_NAMES(
+            "ShowPreeditText",
+            "", SD_BUS_PARAM(),
+            0),
+    SD_BUS_SIGNAL_WITH_NAMES(
+            "HidePreeditText",
+            "", SD_BUS_PARAM(),
+            0),
+    SD_BUS_SIGNAL_WITH_NAMES(
+            "UpdateAuxiliaryTextWithMode",
+            "vb", SD_BUS_PARAM(text) SD_BUS_PARAM(visible),
+            0),
+    SD_BUS_SIGNAL_WITH_NAMES(
+            "ShowAuxiliaryText",
+            "", SD_BUS_PARAM(),
+            0),
+    SD_BUS_SIGNAL_WITH_NAMES(
+            "HideAuxiliaryText",
+            "", SD_BUS_PARAM(),
+            0),
+    SD_BUS_SIGNAL_WITH_NAMES(
+            "UpdateLookupTable",
+            "vb", SD_BUS_PARAM(table) SD_BUS_PARAM(visible),
+            0),
+    SD_BUS_SIGNAL_WITH_NAMES(
+            "ShowLookupTable",
+            "", SD_BUS_PARAM(),
+            0),
+    SD_BUS_SIGNAL_WITH_NAMES(
+            "HideLookupTable",
+            "", SD_BUS_PARAM(),
+            0),
+    SD_BUS_SIGNAL_WITH_NAMES(
+            "PageUpLookupTable",
+            "", SD_BUS_PARAM(),
+            0),
+    SD_BUS_SIGNAL_WITH_NAMES(
+            "PageDownLookupTable",
+            "", SD_BUS_PARAM(),
+            0),
+    SD_BUS_SIGNAL_WITH_NAMES(
+            "CursorUpLookupTable",
+            "", SD_BUS_PARAM(),
+            0),
+    SD_BUS_SIGNAL_WITH_NAMES(
+            "CursorDownLookupTable",
+            "", SD_BUS_PARAM(),
+            0),
+    SD_BUS_SIGNAL_WITH_NAMES(
+            "RegisterProperties",
+            "v", SD_BUS_PARAM(props),
+            0),
+    SD_BUS_SIGNAL_WITH_NAMES(
+            "UpdateProperty",
+            "v", SD_BUS_PARAM(prop),
+            0),
+    SD_BUS_WRITABLE_PROPERTY(
+            "ClientCommitPreedit",
+            "(b)",
+            (&ibus_frontend_prop_adapter<&IBusFrontEnd::ctx_get_client_commit_preedit>),
+            (&ibus_frontend_prop_adapter<&IBusFrontEnd::ctx_set_client_commit_preedit>),
+            0,
+            SD_BUS_VTABLE_PROPERTY_EMITS_CHANGE),
+    SD_BUS_WRITABLE_PROPERTY(
+            "ContentType",
+            "(uu)",
+            (&ibus_frontend_prop_adapter<&IBusFrontEnd::ctx_get_content_type>),
+            (&ibus_frontend_prop_adapter<&IBusFrontEnd::ctx_set_content_type>),
+            0,
+            SD_BUS_VTABLE_PROPERTY_EMITS_CHANGE),
+    SD_BUS_VTABLE_END,
+};
+
+const sd_bus_vtable IBusFrontEnd::m_service_vtbl[] = {
+    SD_BUS_VTABLE_START(0),
+    SD_BUS_METHOD(
+            "Destroy",
+            "",
+            "",
+            (&ibus_frontend_message_adapter<&IBusFrontEnd::srv_destroy>),
             SD_BUS_VTABLE_UNPRIVILEGED),
     SD_BUS_VTABLE_END,
 };
@@ -105,12 +283,12 @@ const sd_bus_vtable IBusFrontEnd::m_portal_vtbl[] = {
 extern "C" {
     void scim_module_init (void)
     {
-        SCIM_DEBUG_FRONTEND(1) << "Initializing IBus FrontEnd module...\n";
+        SCIM_DEBUG_FRONTEND(1) << "Initializing Socket FrontEnd module...\n";
     }
 
     void scim_module_exit (void)
     {
-        SCIM_DEBUG_FRONTEND(1) << "Exiting IBus FrontEnd module...\n";
+        SCIM_DEBUG_FRONTEND(1) << "Exiting Socket FrontEnd module...\n";
         _scim_frontend.reset ();
     }
 
@@ -119,2706 +297,1668 @@ extern "C" {
                                     int argc,
                                      char **argv)
     {
-        if (config.null () || backend.null ()) 
-            throw FrontEndError (String ("IBus FrontEnd couldn't run without Config and BackEnd.\n")); 
-
         if (_scim_frontend.null ()) {
-            SCIM_DEBUG_FRONTEND(1) << "Initializing IBus FrontEnd module (more)...\n";
+            SCIM_DEBUG_FRONTEND(1) << "Initializing Socket FrontEnd module (more)...\n";
             _scim_frontend = new IBusFrontEnd (backend, config);
-            _scim_frontend->init (argc, argv);
+            _argc = argc;
+            _argv = argv;
         }
     }
 
     void scim_frontend_module_run (void)
     {
         if (!_scim_frontend.null ()) {
-            SCIM_DEBUG_FRONTEND(1) << "Starting IBus FrontEnd module...\n";
+            SCIM_DEBUG_FRONTEND(1) << "Starting Socket FrontEnd module...\n";
+            _scim_frontend->init (_argc, _argv);
             _scim_frontend->run ();
         }
     }
 }
 
 IBusFrontEnd::IBusFrontEnd (const BackEndPointer &backend,
-                          const ConfigPointer &config,
-                          const String& server_name)
+                                const ConfigPointer  &config)
     : FrontEndBase (backend),
-      m_xims (0),
-      m_display (0),
-      m_xims_window (0),
-      m_server_name (server_name),
-      m_display_name(getenv("DISPLAY")),
-      m_panel_source(NULL),
-      m_focus_ic (0),
-      m_xims_dynamic (true),
-      m_wchar_ucs4_equal (scim_if_wchar_ucs4_equal ()),
-      m_broken_wchar (false),
-      m_shared_input_method (false),
-      m_keyboard_layout (SCIM_KEYBOARD_Default),
-      m_valid_key_mask (SCIM_KEY_AllMasks),
-      m_iconv (String ()),
       m_config (config),
-      m_old_x_error_handler (0),
+      m_stay (true),
+      m_config_readonly (false),
+      m_socket_timeout (scim_get_default_socket_timeout ()),
+      m_current_instance (-1),
+      m_current_socket_client (-1),
+      m_current_socket_client_key (0),
+      m_ctx_counter (0),
       m_loop (NULL),
       m_bus (NULL),
-      m_portal_slot(NULL),
-      m_id_counter(1)
+      m_portal_slot (NULL)
 {
-    log_func();
-
-    if (!_scim_frontend.null () && _scim_frontend != this) {
-        throw FrontEndError (
-            String ("IBus -- only one frontend can be created!"));
-    }
-
-    if (!m_server_name.length ())
-        m_server_name = String ("SCIM");
-
-    // Attach Panel Client signal.
-    m_panel_client.signal_connect_reload_config                 (slot (this, &IBusFrontEnd::panel_slot_reload_config));
-    m_panel_client.signal_connect_exit                          (slot (this, &IBusFrontEnd::panel_slot_exit));
-    m_panel_client.signal_connect_update_lookup_table_page_size (slot (this, &IBusFrontEnd::panel_slot_update_lookup_table_page_size));
-    m_panel_client.signal_connect_lookup_table_page_up          (slot (this, &IBusFrontEnd::panel_slot_lookup_table_page_up));
-    m_panel_client.signal_connect_lookup_table_page_down        (slot (this, &IBusFrontEnd::panel_slot_lookup_table_page_down));
-    m_panel_client.signal_connect_trigger_property              (slot (this, &IBusFrontEnd::panel_slot_trigger_property));
-    m_panel_client.signal_connect_process_helper_event          (slot (this, &IBusFrontEnd::panel_slot_process_helper_event));
-    m_panel_client.signal_connect_move_preedit_caret            (slot (this, &IBusFrontEnd::panel_slot_move_preedit_caret));
-    m_panel_client.signal_connect_select_candidate              (slot (this, &IBusFrontEnd::panel_slot_select_candidate));
-    m_panel_client.signal_connect_process_key_event             (slot (this, &IBusFrontEnd::panel_slot_process_key_event));
-    m_panel_client.signal_connect_commit_string                 (slot (this, &IBusFrontEnd::panel_slot_commit_string));
-    m_panel_client.signal_connect_forward_key_event             (slot (this, &IBusFrontEnd::panel_slot_forward_key_event));
-    m_panel_client.signal_connect_request_help                  (slot (this, &IBusFrontEnd::panel_slot_request_help));
-    m_panel_client.signal_connect_request_factory_menu          (slot (this, &IBusFrontEnd::panel_slot_request_factory_menu));
-    m_panel_client.signal_connect_change_factory                (slot (this, &IBusFrontEnd::panel_slot_change_factory));
+    SCIM_DEBUG_FRONTEND (2) << " Constructing IBusFrontEnd object...\n";
 }
 
 IBusFrontEnd::~IBusFrontEnd ()
 {
-    log_func();
-
-    if (m_xims) {
-        if (validate_ic (m_focus_ic)) {
-            m_panel_client.prepare (m_focus_ic->icid);
-            focus_out (m_focus_ic->siid);
-            m_panel_client.turn_off (m_focus_ic->icid);
-            m_panel_client.send ();
-            ims_sync_ic (m_focus_ic);
-        }
-
-        XSync(m_display, False);
-        IMCloseIM (m_xims);
+    SCIM_DEBUG_FRONTEND (2) << " Destructing IBusFrontEnd object...\n";
+    if (m_portal_slot) {
+        sd_bus_slot_unref (m_portal_slot);
     }
-
-    if (m_display && m_xims_window) {
-        XDestroyWindow (m_display, m_xims_window);
-        XCloseDisplay (m_display);
-    }
-
-    panel_disconnect();
-
-    m_panel_client.close_connection ();
 
     if (m_bus) {
-        sd_bus_detach_event(m_bus);
-        sd_bus_unref(m_bus);
+        sd_bus_detach_event (m_bus);
+        sd_bus_unref (m_bus);
     }
 
     if (m_loop) {
-        sd_event_unref(m_loop);
+        sd_event_unref (m_loop);
+    }
+
+    if (m_socket_server.is_running ())
+        m_socket_server.shutdown ();
+}
+
+void
+IBusFrontEnd::show_preedit_string (int id)
+{
+    if (m_current_instance == id)
+        m_send_trans.put_command (SCIM_TRANS_CMD_SHOW_PREEDIT_STRING);
+}
+
+void
+IBusFrontEnd::show_aux_string (int id)
+{
+    if (m_current_instance == id)
+        m_send_trans.put_command (SCIM_TRANS_CMD_SHOW_AUX_STRING);
+}
+
+void
+IBusFrontEnd::show_lookup_table (int id)
+{
+    if (m_current_instance == id)
+        m_send_trans.put_command (SCIM_TRANS_CMD_SHOW_LOOKUP_TABLE);
+}
+
+void
+IBusFrontEnd::hide_preedit_string (int id)
+{
+    if (m_current_instance == id)
+        m_send_trans.put_command (SCIM_TRANS_CMD_HIDE_PREEDIT_STRING);
+}
+
+void
+IBusFrontEnd::hide_aux_string (int id)
+{
+    if (m_current_instance == id)
+        m_send_trans.put_command (SCIM_TRANS_CMD_HIDE_AUX_STRING);
+}
+
+void
+IBusFrontEnd::hide_lookup_table (int id)
+{
+    if (m_current_instance == id)
+        m_send_trans.put_command (SCIM_TRANS_CMD_HIDE_LOOKUP_TABLE);
+}
+
+void
+IBusFrontEnd::update_preedit_caret (int id, int caret)
+{
+    if (m_current_instance == id) {
+        m_send_trans.put_command (SCIM_TRANS_CMD_UPDATE_PREEDIT_CARET);
+        m_send_trans.put_data ((uint32) caret);
     }
 }
 
 void
-IBusFrontEnd::show_preedit_string (int siid)
+IBusFrontEnd::update_preedit_string (int id,
+                                       const WideString & str,
+                                       const AttributeList & attrs)
 {
-    SCIM_DEBUG_FRONTEND(2) << " Show preedit string, siid=" << siid << "\n";
-
-    if (is_inputing_ic (siid)) {
-        if (ims_is_preedit_callback_mode (m_focus_ic))
-            ims_preedit_callback_start (m_focus_ic);
-        else
-            m_panel_client.show_preedit_string (m_focus_ic->icid);
+    if (m_current_instance == id) {
+        m_send_trans.put_command (SCIM_TRANS_CMD_UPDATE_PREEDIT_STRING);
+        m_send_trans.put_data (str);
+        m_send_trans.put_data (attrs);
     }
 }
 
 void
-IBusFrontEnd::show_aux_string (int siid)
+IBusFrontEnd::update_aux_string (int id,
+                                   const WideString & str,
+                                   const AttributeList & attrs)
 {
-    SCIM_DEBUG_FRONTEND(2) << " Show aux string, siid=" << siid << "\n";
-
-    if (is_inputing_ic (siid))
-        m_panel_client.show_aux_string (m_focus_ic->icid);
-}
-
-void
-IBusFrontEnd::show_lookup_table (int siid)
-{
-    SCIM_DEBUG_FRONTEND(2) << " Show lookup table, siid=" << siid << "\n";
-
-    if (is_inputing_ic (siid))
-        m_panel_client.show_lookup_table (m_focus_ic->icid);
-}
-
-void
-IBusFrontEnd::hide_preedit_string (int siid)
-{
-    SCIM_DEBUG_FRONTEND(2) << " Hide preedit string, siid=" << siid << "\n";
-
-    if (is_focused_ic (siid)) {
-        if (ims_is_preedit_callback_mode (m_focus_ic))
-            ims_preedit_callback_done (m_focus_ic);
-        else
-            m_panel_client.hide_preedit_string (m_focus_ic->icid);
+    if (m_current_instance == id) {
+        m_send_trans.put_command (SCIM_TRANS_CMD_UPDATE_AUX_STRING);
+        m_send_trans.put_data (str);
+        m_send_trans.put_data (attrs);
     }
 }
 
 void
-IBusFrontEnd::hide_aux_string (int siid)
+IBusFrontEnd::commit_string (int id, const WideString & str)
 {
-    SCIM_DEBUG_FRONTEND(2) << " Hide aux string, siid=" << siid << "\n";
-
-    if (is_focused_ic (siid))
-        m_panel_client.hide_aux_string (m_focus_ic->icid);
-}
-
-void
-IBusFrontEnd::hide_lookup_table (int siid)
-{
-    SCIM_DEBUG_FRONTEND(2) << " Hide lookup table, siid=" << siid << "\n";
-
-    if (is_focused_ic (siid))
-        m_panel_client.hide_lookup_table (m_focus_ic->icid);
-}
-
-void
-IBusFrontEnd::update_preedit_caret (int siid, int caret)
-{
-    SCIM_DEBUG_FRONTEND(2) << " Update preedit caret, siid=" << siid << " caret=" << caret << "\n";
-
-    if (is_inputing_ic (siid)) {
-        if (ims_is_preedit_callback_mode (m_focus_ic))
-            ims_preedit_callback_caret (m_focus_ic, caret);
-        else
-            m_panel_client.update_preedit_caret (m_focus_ic->icid, caret);
+    if (m_current_instance == id) {
+        m_send_trans.put_command (SCIM_TRANS_CMD_COMMIT_STRING);
+        m_send_trans.put_data (str);
     }
 }
 
 void
-IBusFrontEnd::update_preedit_string (int siid, const WideString & str, const AttributeList & attrs)
+IBusFrontEnd::forward_key_event (int id, const KeyEvent & key)
 {
-    SCIM_DEBUG_FRONTEND(2) << " Update preedit string, siid=" << siid << "\n";
-
-    if (is_inputing_ic (siid)) {
-        if (ims_is_preedit_callback_mode (m_focus_ic))
-            ims_preedit_callback_draw (m_focus_ic, str, attrs);
-        else
-            m_panel_client.update_preedit_string (m_focus_ic->icid, str, attrs); 
+    if (m_current_instance == id) {
+        m_send_trans.put_command (SCIM_TRANS_CMD_FORWARD_KEY_EVENT);
+        m_send_trans.put_data (key);
     }
 }
 
 void
-IBusFrontEnd::update_aux_string (int siid, const WideString & str, const AttributeList & attrs)
+IBusFrontEnd::update_lookup_table (int id, const LookupTable & table)
 {
-    SCIM_DEBUG_FRONTEND(2) << " Update aux string, siid=" << siid << "\n";
-
-    if (is_inputing_ic (siid))
-        m_panel_client.update_aux_string (m_focus_ic->icid, str, attrs); 
+    if (m_current_instance == id) {
+        m_send_trans.put_command (SCIM_TRANS_CMD_UPDATE_LOOKUP_TABLE);
+        m_send_trans.put_data (table);
+    }
 }
 
 void
-IBusFrontEnd::update_lookup_table (int siid, const LookupTable & table)
+IBusFrontEnd::register_properties (int id, const PropertyList &properties)
 {
-    SCIM_DEBUG_FRONTEND(2) << " Update lookup table, siid=" << siid << "\n";
-
-    if (is_inputing_ic (siid))
-        m_panel_client.update_lookup_table (m_focus_ic->icid, table);
+    if (m_current_instance == id) {
+        m_send_trans.put_command (SCIM_TRANS_CMD_REGISTER_PROPERTIES);
+        m_send_trans.put_data (properties);
+    }
 }
 
 void
-IBusFrontEnd::commit_string (int siid, const WideString & str)
+IBusFrontEnd::update_property (int id, const Property &property)
 {
-    SCIM_DEBUG_FRONTEND(2) << " Commit string, siid=" << siid << "\n";
-
-    if (is_focused_ic (siid))
-        ims_commit_string (m_focus_ic, str);
+    if (m_current_instance == id) {
+        m_send_trans.put_command (SCIM_TRANS_CMD_UPDATE_PROPERTY);
+        m_send_trans.put_data (property);
+    }
 }
 
 void
-IBusFrontEnd::forward_key_event (int siid, const KeyEvent & key)
+IBusFrontEnd::beep (int id)
 {
-    SCIM_DEBUG_FRONTEND(2) << " Forward keyevent, siid=" << siid << "\n";
-
-    if (is_focused_ic (siid))
-        ims_forward_key_event (m_focus_ic, key);
+    if (m_current_instance == id) {
+        m_send_trans.put_command (SCIM_TRANS_CMD_BEEP);
+    }
 }
 
 void
-IBusFrontEnd::register_properties (int siid, const PropertyList &properties)
+IBusFrontEnd::start_helper (int id, const String &helper_uuid)
 {
-    SCIM_DEBUG_FRONTEND(2) << " Register properties, siid=" << siid << "\n";
-
-    if (is_inputing_ic (siid))
-        m_panel_client.register_properties (m_focus_ic->icid, properties);
+    SCIM_DEBUG_FRONTEND (2) << "start_helper (" << helper_uuid << ")\n";
+    if (m_current_instance == id) {
+        m_send_trans.put_command (SCIM_TRANS_CMD_START_HELPER);
+        m_send_trans.put_data (helper_uuid);
+    }
 }
 
 void
-IBusFrontEnd::update_property (int siid, const Property &property)
+IBusFrontEnd::stop_helper (int id, const String &helper_uuid)
 {
-    SCIM_DEBUG_FRONTEND(2) << " Update property, siid=" << siid << "\n";
+    SCIM_DEBUG_FRONTEND (2) << "stop_helper (" << helper_uuid << ")\n";
 
-    if (is_inputing_ic (siid))
-        m_panel_client.update_property (m_focus_ic->icid, property);
+    if (m_current_instance == id) {
+        m_send_trans.put_command (SCIM_TRANS_CMD_STOP_HELPER);
+        m_send_trans.put_data (helper_uuid);
+    }
 }
 
 void
-IBusFrontEnd::beep (int siid)
+IBusFrontEnd::send_helper_event (int id, const String &helper_uuid, const Transaction &trans)
 {
-    SCIM_DEBUG_FRONTEND(2) << " Beep, siid=" << siid << "\n";
-
-    if (is_inputing_ic (siid))
-        XBell (m_display, 0);
-}
-
-void
-IBusFrontEnd::start_helper (int siid, const String &helper_uuid)
-{
-    SCIM_DEBUG_FRONTEND(2) << " Start helper, siid=" << siid << " Helper=" << helper_uuid << "\n";
-
-    X11IC *ic = m_ic_manager.find_ic_by_siid (siid);
-
-    if (validate_ic (ic))
-        m_panel_client.start_helper (ic->icid, helper_uuid);
-}
-
-void
-IBusFrontEnd::stop_helper (int siid, const String &helper_uuid)
-{
-    SCIM_DEBUG_FRONTEND(2) << " Stop helper, siid=" << siid << " Helper=" << helper_uuid << "\n";
-
-    X11IC *ic = m_ic_manager.find_ic_by_siid (siid);
-
-    if (validate_ic (ic))
-        m_panel_client.stop_helper (ic->icid, helper_uuid);
-}
-
-void
-IBusFrontEnd::send_helper_event (int siid, const String &helper_uuid, const Transaction &trans)
-{
-    SCIM_DEBUG_FRONTEND(2) << " Send helper event, siid=" << siid << " Helper=" << helper_uuid << "\n";
-
-    X11IC *ic = m_ic_manager.find_ic_by_siid (siid);
-
-    if (validate_ic (ic))
-        m_panel_client.send_helper_event (ic->icid, helper_uuid, trans);
+    if (m_current_instance == id) {
+        m_send_trans.put_command (SCIM_TRANS_CMD_SEND_HELPER_EVENT);
+        m_send_trans.put_data (helper_uuid);
+        m_send_trans.put_data (trans);
+    }
 }
 
 bool
-IBusFrontEnd::get_surrounding_text (int siid, WideString &text, int &cursor, int maxlen_before, int maxlen_after)
+IBusFrontEnd::get_surrounding_text (int id, WideString &text, int &cursor, int maxlen_before, int maxlen_after)
 {
-    SCIM_DEBUG_FRONTEND(2) << " Get surrounding text, siid=" << siid << "\n";
-
     text.clear ();
     cursor = 0;
 
-    if (is_inputing_ic (siid)) {
-//      return ims_string_conversion_callback_retrieval (m_focus_ic, text, cursor, maxlen_before, maxlen_after);
-        return false;
-    }
+    if (m_current_instance == id && m_current_socket_client >= 0 && (maxlen_before != 0 || maxlen_after != 0)) {
+        if (maxlen_before < 0) maxlen_before = -1;
+        if (maxlen_after < 0) maxlen_after = -1;
 
+        m_temp_trans.clear ();
+        m_temp_trans.put_command (SCIM_TRANS_CMD_REPLY);
+        m_temp_trans.put_command (SCIM_TRANS_CMD_GET_SURROUNDING_TEXT);
+        m_temp_trans.put_data ((uint32) maxlen_before);
+        m_temp_trans.put_data ((uint32) maxlen_after);
+
+        Socket socket_client (m_current_socket_client);
+
+        if (m_temp_trans.write_to_socket (socket_client) &&
+            m_temp_trans.read_from_socket (socket_client, m_socket_timeout)) {
+
+            int cmd;
+            uint32 key;
+            uint32 cur;
+
+            if (m_temp_trans.get_command (cmd) && cmd == SCIM_TRANS_CMD_REQUEST &&
+                m_temp_trans.get_data (key) && key == m_current_socket_client_key &&
+                m_temp_trans.get_command (cmd) && cmd == SCIM_TRANS_CMD_GET_SURROUNDING_TEXT &&
+                m_temp_trans.get_data (text) && m_temp_trans.get_data (cur)) {
+                cursor = (int) cur;
+                return true;
+            }
+        }
+    }
     return false;
 }
 
 bool
-IBusFrontEnd::delete_surrounding_text (int siid, int offset, int len)
+IBusFrontEnd::delete_surrounding_text (int id, int offset, int len)
 {
-    SCIM_DEBUG_FRONTEND(2) << " Delete surrounding text, siid=" << siid << " offset = " << offset << " len = " << len << "\n";
+    if (m_current_instance == id && m_current_socket_client >= 0 && len > 0) {
+        m_temp_trans.clear ();
+        m_temp_trans.put_command (SCIM_TRANS_CMD_REPLY);
+        m_temp_trans.put_command (SCIM_TRANS_CMD_DELETE_SURROUNDING_TEXT);
+        m_temp_trans.put_data ((uint32) offset);
+        m_temp_trans.put_data ((uint32) len);
 
-    if (is_inputing_ic (siid)) {
-//      return ims_string_conversion_callback_substitution (m_focus_ic, offset, len);
-        return false;
+        Socket socket_client (m_current_socket_client);
+
+        if (m_temp_trans.write_to_socket (socket_client) &&
+            m_temp_trans.read_from_socket (socket_client, m_socket_timeout)) {
+
+            int cmd;
+            uint32 key;
+
+            if (m_temp_trans.get_command (cmd) && cmd == SCIM_TRANS_CMD_REQUEST &&
+                m_temp_trans.get_data (key) && key == m_current_socket_client_key &&
+                m_temp_trans.get_command (cmd) && cmd == SCIM_TRANS_CMD_DELETE_SURROUNDING_TEXT &&
+                m_temp_trans.get_command (cmd) && cmd == SCIM_TRANS_CMD_OK)
+                return true;
+        }
     }
-
     return false;
-}
-
-int
-IBusFrontEnd::panel_connect ()
-{
-    log_func();
-
-    if (m_panel_client.is_connected()) {
-        return 0;
-    }
-
-    if (m_panel_client.open_connection (m_config->get_name (), m_display_name) < 0) {
-        return -1;
-    }
-
-    int fd = m_panel_client.get_connection_number();
-    if (sd_event_add_io(m_loop,
-                        &m_panel_source,
-                        fd,
-                        EPOLLIN,
-                        &sd_event_io_adapter<IBusFrontEnd, &IBusFrontEnd::panel_handle_io>,
-                        this) < 0) {
-        return -1;
-    }
-
-    return 0;
-}
-
-void
-IBusFrontEnd::panel_disconnect ()
-{
-    log_func();
-
-    if (m_panel_source) {
-        sd_event_source_unref(m_panel_source);
-        m_panel_source = NULL; 
-    }
-
-    if (m_panel_client.is_connected()) {
-        m_panel_client.close_connection();
-    }
-}
-
-int IBusFrontEnd::create_ic (IBusInputContextPointer &out, int siid)
-{
-    int id = next_ic_id();
-    IBusInputContextPointer ic = new IBusInputContext(this, id, siid);
-    if (ic->init(m_bus) < 0) {
-        SCIM_DEBUG_FRONTEND(5) << "Failed to initialize input context\n";
-        return -1;
-    }
-
-    m_id_ic_map[id] = ic;
-
-    out = ic;
-
-    return 0;
-}
-
-IBusInputContext *IBusFrontEnd::find_ic (int ic_id)
-{
-    std::map<int, IBusInputContextPointer>::iterator it = m_id_ic_map.find(ic_id);
-    if (it == m_id_ic_map.end()) {
-        return IBusInputContextPointer(0);
-    }
-
-    return it->second;
-}
-
-int IBusFrontEnd::next_ic_id()
-{
-    return m_id_counter ++;
-}
-
-int IBusFrontEnd::create_input_context (sd_bus_message *m, sd_bus_error *ret_error)
-{
-    log_func();
-
-    String locale = scim_get_current_locale ();
-    //String locale = m_ic_manager.get_connection_locale (call_data->connect_id);
-    String language = scim_get_locale_language (locale);
-    String encoding = scim_get_locale_encoding (locale);
-
-    log_debug("locale=%s, language=%s, encoding=%s",
-              locale.c_str(),
-              language.c_str(),
-              encoding.c_str());
-    SCIM_DEBUG_FRONTEND(2) << " IMS Create handler: Locale=" << locale
-                           << " Language=" << language
-                           << " Encoding=" << encoding << "\n";
-
-    if (language.empty () || encoding.empty ())
-        return 0;
-
-    int siid = -1;
-
-    if (m_shared_input_method) {
-        siid = get_default_instance (language, encoding);
-    } else {
-        String sfid = get_default_factory (language, encoding);
-        siid = new_instance (sfid, encoding);
-    }
-
-    if (siid < 0) {
-        SCIM_DEBUG_FRONTEND(2) << " IMS Create handler Failed\n";
-        return 0;
-    }
-
-    IBusInputContextPointer ic;
-    if (create_ic(ic, siid) < 0) {
-        return -1;
-    }
-//  uint32 attrs = m_ic_manager.create_ic (call_data, siid);
-//
-//  X11IC *ic = m_ic_manager.find_ic (call_data->icid);
-
-  SCIM_DEBUG_FRONTEND(2) << " IMS Create handler OK: SIID="
-      << siid << " ICID = " << ic->get_id() << "\n";
-//  SCIM_DEBUG_FRONTEND(2) << " IMS Create handler OK: SIID="
-//      << siid << " ICID = " << ic->icid << " Connect ID=" << call_data->connect_id  << "\n";
-
-    m_panel_client.prepare (ic->get_id()); //ic->icid);
-
-    m_panel_client.register_input_context (ic->get_id(), get_instance_uuid (siid)); //ic->icid, get_instance_uuid (siid));
-
-//        if (attrs & SCIM_X11_IC_INPUT_STYLE)
-//            set_ic_capabilities (ic);
-
-    m_panel_client.send ();
-
-    if (m_shared_input_method) {
-        ic->set_on(m_config->read (String (SCIM_CONFIG_FRONTEND_IM_OPENED_BY_DEFAULT), ic->is_on()));
-        ic->set_shared_siid(true);
-    }
-
-    return sd_bus_reply_method_return(m, "o", ic->get_object_path().c_str());
-}
-
-void IBusFrontEnd::input_context_destroy (IBusInputContext *ic)
-{
-    log_func();
-
-//    X11IC *ic = m_ic_manager.find_ic (call_data->icid);
-    if(find_ic(ic->get_id()) == NULL) {
-        SCIM_DEBUG_FRONTEND(1) << "Cannot find IC for icid " << ic->get_id() << "\n";
-        return;
-    }
-
-    SCIM_DEBUG_FRONTEND(2) << " IMS Destroy IC handler, ICID="
-                    << ic->get_id() << "\n";
-
-    m_panel_client.prepare (ic->get_id());
-
-    if (is_focused_ic (ic)) {
-        focus_out (ic->get_siid());
-        m_panel_client.turn_off (ic->get_id());
-        m_panel_client.focus_out (ic->get_id());
-    }
-
-    IBusInputContextPointer old_focus = m_focused_ic;
-//    X11IC *old_focus = m_focus_ic;
-
-    m_focused_ic = ic;
-
-    if (!ic->is_shared_siid()) delete_instance (ic->get_siid());
-
-    m_panel_client.remove_input_context (ic->get_id());
-    m_panel_client.send ();
-
-    if (is_focused_ic (ic))
-        m_focused_ic = NULL;
-    else
-        m_focused_ic = old_focus;
-
-    m_id_ic_map.erase(ic->get_id());
-//    m_ic_manager.destroy_ic (call_data);
-}
-
-int
-IBusFrontEnd::panel_handle_io (sd_event_source *s, int fd, uint32_t revents)
-{
-    log_func();
-
-    if (!m_panel_client.filter_event ()) {
-        panel_disconnect();
-        panel_connect();
-    }
-
-    return 0;
 }
 
 void
 IBusFrontEnd::init (int argc, char **argv)
 {
-    log_func();
+    int max_clients = -1;
 
-    String str;
+    if (!m_config.null ()) {
+        String str;
 
-    SCIM_DEBUG_FRONTEND (1) << "IBus -- Loading configuration.\n";
+        m_config_readonly = m_config->read (String (SCIM_CONFIG_FRONTEND_IBUS_CONFIG_READONLY), false);
 
-    //Read settings.
-    reload_config_callback (m_config);
+        max_clients = m_config->read (String (SCIM_CONFIG_FRONTEND_IBUS_MAXCLIENTS), -1);
 
-//    m_server_name =
-//        m_config->read (String (SCIM_CONFIG_FRONTEND_IBUS_SERVER_NAME),
-//                        m_server_name);
-
-//    m_xims_dynamic =
-//        m_config->read (String (SCIM_CONFIG_FRONTEND_IBUS_DYNAMIC),
-//                        true);
-
-    m_config->signal_connect_reload (slot (this, &IBusFrontEnd::reload_config_callback));
-
-//    m_display_name = init_ims ();
-
-    SCIM_DEBUG_FRONTEND (1) << "IBus -- Connecting to panel daemon.\n";
-
-    if (sd_event_new(&m_loop) < 0) {
-        throw FrontEndError (String ("IBus -- failed to create event loop!"));
-    }
-
-    if (sd_bus_open_user(&m_bus) < 0) {
-        throw FrontEndError (String ("IBus -- failed to connect to ibus!"));
-    }
-
-    if (sd_bus_attach_event(m_bus, m_loop, SD_EVENT_PRIORITY_NORMAL) < 0) {
-        throw FrontEndError (String ("IBus -- failed to attach event loop!"));
-    }
-
-    log_trace("registering IBus portal service...");
-    if (sd_bus_request_name(m_bus,
-                            IBUS_PORTAL_SERVICE,
-                            SD_BUS_NAME_ALLOW_REPLACEMENT |
-                                SD_BUS_NAME_REPLACE_EXISTING) < 0) {
-        throw FrontEndError (String ("IBus -- failed to register portal service!"));
-    }
-
-    if (sd_bus_add_object_vtable(m_bus,
-                                 &m_portal_slot,
-                                 IBUS_PORTAL_OBJECT_PATH,
-                                 IBUS_PORTAL_INTERFACE,
-                                 m_portal_vtbl,
-                                 this) < 0) {
-        throw FrontEndError (String ("IBus -- failed to add portable vtable!"));
-    }
-
-    log_trace("connect to panel...");
-    if (panel_connect() < 0) {
-        throw FrontEndError (String ("IBus -- failed to connect to the panel daemon!"));
-    }
-    log_trace("connected");
-
-    // Only use ComposeKeyFactory when it's enabled.
-    if (validate_factory (SCIM_COMPOSE_KEY_FACTORY_UUID, "UTF-8")) {
-        m_fallback_factory = new ComposeKeyFactory ();
+        m_config->signal_connect_reload (slot (this, &IBusFrontEnd::reload_config_callback));
     } else {
-        m_fallback_factory = new DummyIMEngineFactory ();
+        m_config_readonly = false;
+        max_clients = -1;
     }
 
-    m_fallback_instance = m_fallback_factory->create_instance (String ("UTF-8"), 0);
-    m_fallback_instance->signal_connect_commit_string (slot (this, &IBusFrontEnd::fallback_commit_string_cb));
+//    if (!m_socket_server.create (scim_get_default_socket_frontend_address ()))
+//        throw FrontEndError ("IBusFrontEnd -- Cannot create SocketServer.");
+//
+//    m_socket_server.set_max_clients (max_clients);
+//
+//    m_socket_server.signal_connect_accept (
+//        slot (this, &IBusFrontEnd::ibus_accept_callback));
+//
+//    m_socket_server.signal_connect_receive (
+//        slot (this, &IBusFrontEnd::ibus_receive_callback));
+//
+//    m_socket_server.signal_connect_exception(
+//        slot (this, &IBusFrontEnd::ibus_exception_callback));
+
+    if (argv && argc > 1) {
+        for (int i = 1; i < argc && argv [i]; ++i) {
+            if (String ("--no-stay") == argv [i])
+                m_stay = false;
+        }
+    }
+
+    if (sd_event_new (&m_loop) < 0) {
+        throw FrontEndError ("IBusFrontEnd -- Cannot create event loop.");
+    }
+
+    if (sd_bus_open_user (&m_bus) < 0) {
+        throw FrontEndError ("IBusFrontEnd -- Cannot connect to session bus.");
+    }
+
+    if (sd_bus_attach_event (m_bus, m_loop, SD_EVENT_PRIORITY_NORMAL) < 0) {
+        throw FrontEndError ("IBusFrontEnd -- Cannot attach bus to loop.");
+    }
+
+    if (sd_bus_request_name (m_bus,
+                             IBUS_PORTAL_SERVICE,
+                             SD_BUS_NAME_ALLOW_REPLACEMENT |
+                                 SD_BUS_NAME_REPLACE_EXISTING) < 0) {
+        throw FrontEndError (String ("IBus -- failed to aquire service name!"));
+    }
+
+    if (sd_bus_add_object_vtable (m_bus,
+                                  &m_portal_slot,
+                                  IBUS_PORTAL_OBJECT_PATH,
+                                  IBUS_PORTAL_INTERFACE,
+                                  m_portal_vtbl,
+                                  this) < 0) {
+        throw FrontEndError (String ("IBus -- failed to add portal object!"));
+    }
+
+    /**
+     * initialize the random number generator.
+     */
+//    srand (time (0));
 }
 
 void
 IBusFrontEnd::run ()
 {
-    log_func();
-
-    if (!m_loop || !m_bus || m_panel_client.get_connection_number () < 0) {
-        SCIM_DEBUG_FRONTEND(1) << "IBus -- Cannot run without initialization!\n";
-        return;
+//    if (m_socket_server.valid ())
+//        m_socket_server.run ();
+    if (m_loop) {
+        sd_event_loop (m_loop);
     }
-
-    sd_event_loop(m_loop);
-}
-
-String
-IBusFrontEnd::get_supported_locales (void)
-{
-    std::vector <String> all_locales;
-    std::vector <String> supported_locales;
-
-    scim_split_string_list (all_locales, get_all_locales (), ',');
-
-    String last = String (setlocale (LC_CTYPE, 0));
-
-    for (size_t i = 0; i < all_locales.size (); ++i) {
-        if (setlocale (LC_CTYPE, all_locales [i].c_str ()) && XSupportsLocale ())
-            supported_locales.push_back (all_locales [i]);
-    }
-
-    setlocale (LC_CTYPE, last.c_str ());
-
-    return scim_combine_string_list (supported_locales, ',');
 }
 
 int
-IBusFrontEnd::get_default_instance (const String &language, const String &encoding)
+IBusFrontEnd::generate_ctx_id ()
 {
-    DefaultInstanceMap::iterator it = m_default_instance_map.find (encoding);
-    String sfid = get_default_factory (language, encoding);
+    return ++ m_ctx_counter;
+}
 
-    if (it == m_default_instance_map.end ()) {
+bool
+IBusFrontEnd::check_client_connection (const Socket &client) const
+{
+    SCIM_DEBUG_FRONTEND (1) << "check_client_connection (" << client.get_id () << ").\n";
+
+    unsigned char buf [sizeof(uint32)];
+
+    int nbytes = client.read_with_timeout (buf, sizeof(uint32), m_socket_timeout);
+
+    if (nbytes == sizeof (uint32))
+        return true;
+
+    if (nbytes < 0) {
+        SCIM_DEBUG_FRONTEND (2) << " Error occurred when reading ibus (" << client.get_id ()
+            << "):" << client.get_error_message () << "\n";
+    } else {
+        SCIM_DEBUG_FRONTEND (2) << " Timeout when reading ibus (" << client.get_id ()
+            << ").\n";
+    }
+
+    return false;
+}
+
+void
+IBusFrontEnd::ibus_accept_callback (SocketServer *server, const Socket &client)
+{
+    SCIM_DEBUG_FRONTEND (1) << "ibus_accept_callback (" << client.get_id () << ").\n";
+}
+
+void
+IBusFrontEnd::ibus_receive_callback (SocketServer *server, const Socket &client)
+{
+    int id = client.get_id ();
+    int cmd;
+    uint32 key;
+
+    ClientInfo client_info;
+
+    SCIM_DEBUG_FRONTEND (1) << "ibus_receive_callback (" << id << ").\n";
+
+    // Check if the client is closed.
+    if (!check_client_connection (client)) {
+        SCIM_DEBUG_FRONTEND (2) << " closing client connection.\n";
+        ibus_close_connection (server, client);
+        return;
+    }
+
+    client_info = ibus_get_client_info (client);
+
+    // If it's a new client, then request to open the connection first.
+    if (client_info.type == UNKNOWN_CLIENT) {
+        ibus_open_connection (server, client);
+        return;
+    }
+
+    // If can not read the transaction,
+    // or the transaction is not started with SCIM_TRANS_CMD_REQUEST,
+    // or the key is mismatch,
+    // just return.
+    if (!m_receive_trans.read_from_socket (client, m_socket_timeout) ||
+        !m_receive_trans.get_command (cmd) || cmd != SCIM_TRANS_CMD_REQUEST ||
+        !m_receive_trans.get_data (key) || key != (uint32) client_info.key)
+        return;
+
+    m_current_socket_client     = id;
+    m_current_socket_client_key = key;
+
+    m_send_trans.clear ();
+    m_send_trans.put_command (SCIM_TRANS_CMD_REPLY);
+
+    // Move the read ptr to the end.
+    m_send_trans.get_command (cmd);
+
+    while (m_receive_trans.get_command (cmd)) {
+        if (cmd == SCIM_TRANS_CMD_PROCESS_KEY_EVENT)
+            ibus_process_key_event (id);
+        else if (cmd == SCIM_TRANS_CMD_MOVE_PREEDIT_CARET)
+            ibus_move_preedit_caret (id);
+        else if (cmd == SCIM_TRANS_CMD_SELECT_CANDIDATE)
+            ibus_select_candidate (id);
+        else if (cmd == SCIM_TRANS_CMD_UPDATE_LOOKUP_TABLE_PAGE_SIZE)
+            ibus_update_lookup_table_page_size (id);
+        else if (cmd == SCIM_TRANS_CMD_LOOKUP_TABLE_PAGE_UP)
+            ibus_lookup_table_page_up (id);
+        else if (cmd == SCIM_TRANS_CMD_LOOKUP_TABLE_PAGE_DOWN)
+            ibus_lookup_table_page_down (id);
+        else if (cmd == SCIM_TRANS_CMD_RESET)
+            ibus_reset (id);
+        else if (cmd == SCIM_TRANS_CMD_FOCUS_IN)
+            ibus_focus_in (id);
+        else if (cmd == SCIM_TRANS_CMD_FOCUS_OUT)
+            ibus_focus_out (id);
+        else if (cmd == SCIM_TRANS_CMD_TRIGGER_PROPERTY)
+            ibus_trigger_property (id);
+        else if (cmd == SCIM_TRANS_CMD_PROCESS_HELPER_EVENT)
+            ibus_process_helper_event (id);
+        else if (cmd == SCIM_TRANS_CMD_UPDATE_CLIENT_CAPABILITIES)
+            ibus_update_client_capabilities (id);
+        else if (cmd == SCIM_TRANS_CMD_GET_FACTORY_LIST)
+            ibus_get_factory_list (id);
+        else if (cmd == SCIM_TRANS_CMD_GET_FACTORY_NAME)
+            ibus_get_factory_name (id);
+        else if (cmd == SCIM_TRANS_CMD_GET_FACTORY_AUTHORS)
+            ibus_get_factory_authors (id);
+        else if (cmd == SCIM_TRANS_CMD_GET_FACTORY_CREDITS)
+            ibus_get_factory_credits (id);
+        else if (cmd == SCIM_TRANS_CMD_GET_FACTORY_HELP)
+            ibus_get_factory_help (id);
+        else if (cmd == SCIM_TRANS_CMD_GET_FACTORY_LOCALES)
+            ibus_get_factory_locales (id);
+        else if (cmd == SCIM_TRANS_CMD_GET_FACTORY_ICON_FILE)
+            ibus_get_factory_icon_file (id);
+        else if (cmd == SCIM_TRANS_CMD_GET_FACTORY_LANGUAGE)
+            ibus_get_factory_language (id);
+        else if (cmd == SCIM_TRANS_CMD_NEW_INSTANCE)
+            ibus_new_instance (id);
+        else if (cmd == SCIM_TRANS_CMD_DELETE_INSTANCE)
+            ibus_delete_instance (id);
+        else if (cmd == SCIM_TRANS_CMD_DELETE_ALL_INSTANCES)
+            ibus_delete_all_instances (id);
+        else if (cmd == SCIM_TRANS_CMD_FLUSH_CONFIG)
+            ibus_flush_config (id);
+        else if (cmd == SCIM_TRANS_CMD_ERASE_CONFIG)
+            ibus_erase_config (id);
+        else if (cmd == SCIM_TRANS_CMD_RELOAD_CONFIG)
+            ibus_reload_config (id);
+        else if (cmd == SCIM_TRANS_CMD_GET_CONFIG_STRING)
+            ibus_get_config_string (id);
+        else if (cmd == SCIM_TRANS_CMD_SET_CONFIG_STRING)
+            ibus_set_config_string (id);
+        else if (cmd == SCIM_TRANS_CMD_GET_CONFIG_INT)
+            ibus_get_config_int (id);
+        else if (cmd == SCIM_TRANS_CMD_SET_CONFIG_INT)
+            ibus_set_config_int (id);
+        else if (cmd == SCIM_TRANS_CMD_GET_CONFIG_BOOL)
+            ibus_get_config_bool (id);
+        else if (cmd == SCIM_TRANS_CMD_SET_CONFIG_BOOL)
+            ibus_set_config_bool (id);
+        else if (cmd == SCIM_TRANS_CMD_GET_CONFIG_DOUBLE)
+            ibus_get_config_double (id);
+        else if (cmd == SCIM_TRANS_CMD_SET_CONFIG_DOUBLE)
+            ibus_set_config_double (id);
+        else if (cmd == SCIM_TRANS_CMD_GET_CONFIG_VECTOR_STRING)
+            ibus_get_config_vector_string (id);
+        else if (cmd == SCIM_TRANS_CMD_SET_CONFIG_VECTOR_STRING)
+            ibus_set_config_vector_string (id);
+        else if (cmd == SCIM_TRANS_CMD_GET_CONFIG_VECTOR_INT)
+            ibus_get_config_vector_int (id);
+        else if (cmd == SCIM_TRANS_CMD_SET_CONFIG_VECTOR_INT)
+            ibus_set_config_vector_int (id);
+        else if (cmd == SCIM_TRANS_CMD_LOAD_FILE)
+            ibus_load_file (id);
+        else if (cmd == SCIM_TRANS_CMD_CLOSE_CONNECTION) {
+            ibus_close_connection (server, client);
+            m_current_socket_client     = -1;
+            m_current_socket_client_key = 0;
+            return;
+        }
+    }
+
+    // Send reply to client
+    if (m_send_trans.get_data_type () == SCIM_TRANS_DATA_UNKNOWN)
+        m_send_trans.put_command (SCIM_TRANS_CMD_FAIL);
+
+    m_send_trans.write_to_socket (client);
+
+    m_current_socket_client     = -1;
+    m_current_socket_client_key = 0;
+
+    SCIM_DEBUG_FRONTEND (1) << "End of ibus_receive_callback (" << id << ").\n";
+}
+
+bool
+IBusFrontEnd::ibus_open_connection (SocketServer *server, const Socket &client)
+{
+    SCIM_DEBUG_FRONTEND (2) << " Open ibus connection for client " << client.get_id () << "  number of clients=" << m_socket_client_repository.size () << ".\n";
+
+    uint32 key;
+    String type = scim_socket_accept_connection (key,
+                                                 String ("IBusFrontEnd"), 
+                                                 String ("IBusIMEngine,IBusConfig"),
+                                                 client,
+                                                 m_socket_timeout);
+
+    if (type.length ()) {
+        ClientInfo info;
+        info.key = key;
+        info.type = ((type == "IBusIMEngine") ? IMENGINE_CLIENT : CONFIG_CLIENT);
+
+        SCIM_DEBUG_MAIN (2) << " Add client to repository. Type=" << type << " key=" << key << "\n";
+        m_socket_client_repository [client.get_id ()] = info;
+        return true;
+    }
+
+    // Client did not pass the registration process, close it.
+    SCIM_DEBUG_FRONTEND (2) << " Failed to create new connection.\n"; 
+    server->close_connection (client);
+    return false;
+}
+
+void
+IBusFrontEnd::ibus_close_connection (SocketServer *server, const Socket &client)
+{
+    SCIM_DEBUG_FRONTEND (2) << " Close client connection " << client.get_id () << "  number of clients=" << m_socket_client_repository.size () << ".\n";
+
+    ClientInfo client_info = ibus_get_client_info (client);
+
+    server->close_connection (client);
+
+    if (client_info.type != UNKNOWN_CLIENT) {
+        m_socket_client_repository.erase (client.get_id ());
+
+        if (client_info.type == IMENGINE_CLIENT)
+            ibus_delete_all_instances (client.get_id ());
+
+        if (!m_socket_client_repository.size () && !m_stay)
+            server->shutdown ();
+    }
+}
+
+IBusFrontEnd::ClientInfo
+IBusFrontEnd::ibus_get_client_info (const Socket &client)
+{
+    static ClientInfo null_client = { 0, UNKNOWN_CLIENT };
+    IBusClientRepository::iterator it = m_socket_client_repository.find (client.get_id ());
+
+    if (it != m_socket_client_repository.end ())
+        return it->second;
+
+    return null_client;
+}
+
+void
+IBusFrontEnd::ibus_exception_callback (SocketServer *server, const Socket &client)
+{
+    SCIM_DEBUG_FRONTEND (1) << "ibus_exception_callback (" << client.get_id () << ").\n";
+
+    ibus_close_connection (server, client);
+}
+
+//client_id is client's ibus id
+void
+IBusFrontEnd::ibus_get_factory_list (int /*client_id*/)
+{
+    String encoding;
+
+    SCIM_DEBUG_FRONTEND (2) << " ibus_get_factory_list.\n";
+
+    if (m_receive_trans.get_data (encoding)) {
+        std::vector<String> uuids;
+
+        get_factory_list_for_encoding (uuids, encoding);
+
+        SCIM_DEBUG_FRONTEND (3) << "  Encoding (" << encoding
+            << ") Num(" << uuids.size () << ").\n";
+
+        m_send_trans.put_data (uuids);
+        m_send_trans.put_command (SCIM_TRANS_CMD_OK);
+    }
+}
+
+void
+IBusFrontEnd::ibus_get_factory_name (int /*client_id*/)
+{
+    String sfid;
+
+    SCIM_DEBUG_FRONTEND (2) << " ibus_get_factory_name.\n";
+
+    if (m_receive_trans.get_data (sfid)) {
+        WideString name = get_factory_name (sfid);
+
+        m_send_trans.put_data (name);
+        m_send_trans.put_command (SCIM_TRANS_CMD_OK);
+    }
+}
+
+void
+IBusFrontEnd::ibus_get_factory_authors (int /*client_id*/)
+{
+    String sfid;
+
+    SCIM_DEBUG_FRONTEND (2) << " ibus_get_factory_authors.\n";
+
+    if (m_receive_trans.get_data (sfid)) {
+        WideString authors = get_factory_authors (sfid);
+
+        m_send_trans.put_data (authors);
+        m_send_trans.put_command (SCIM_TRANS_CMD_OK);
+    }
+}
+
+void
+IBusFrontEnd::ibus_get_factory_credits (int /*client_id*/)
+{
+    String sfid;
+
+    SCIM_DEBUG_FRONTEND (2) << " ibus_get_factory_credits.\n";
+
+    if (m_receive_trans.get_data (sfid)) {
+        WideString credits = get_factory_credits (sfid);
+
+        m_send_trans.put_data (credits);
+        m_send_trans.put_command (SCIM_TRANS_CMD_OK);
+    }
+}
+
+void
+IBusFrontEnd::ibus_get_factory_help (int /*client_id*/)
+{
+    String sfid;
+
+    SCIM_DEBUG_FRONTEND (2) << " ibus_get_factory_help.\n";
+
+    if (m_receive_trans.get_data (sfid)) {
+        WideString help = get_factory_help (sfid);
+
+        m_send_trans.put_data (help);
+        m_send_trans.put_command (SCIM_TRANS_CMD_OK);
+    }
+}
+
+void
+IBusFrontEnd::ibus_get_factory_locales (int /*client_id*/)
+{
+    String sfid;
+
+    SCIM_DEBUG_FRONTEND (2) << " ibus_get_factory_locales.\n";
+
+    if (m_receive_trans.get_data (sfid)) {
+        String locales = get_factory_locales (sfid);
+
+        SCIM_DEBUG_FRONTEND (3) << "  Locales (" << locales << ").\n";
+
+        m_send_trans.put_data (locales);
+        m_send_trans.put_command (SCIM_TRANS_CMD_OK);
+    }
+}
+
+void
+IBusFrontEnd::ibus_get_factory_icon_file (int /*client_id*/)
+{
+    String sfid;
+
+    SCIM_DEBUG_FRONTEND (2) << " ibus_get_factory_icon_file.\n";
+
+    if (m_receive_trans.get_data (sfid)) {
+        String iconfile = get_factory_icon_file (sfid);
+
+        SCIM_DEBUG_FRONTEND (3) << "  ICON File (" << iconfile << ").\n";
+
+        m_send_trans.put_data (iconfile);
+        m_send_trans.put_command (SCIM_TRANS_CMD_OK);
+    }
+}
+
+void
+IBusFrontEnd::ibus_get_factory_language (int /*client_id*/)
+{
+    String sfid;
+
+    SCIM_DEBUG_FRONTEND (2) << " ibus_get_factory_language.\n";
+
+    if (m_receive_trans.get_data (sfid)) {
+        String language = get_factory_language (sfid);
+
+        SCIM_DEBUG_FRONTEND (3) << "  Language (" << language << ").\n";
+
+        m_send_trans.put_data (language);
+        m_send_trans.put_command (SCIM_TRANS_CMD_OK);
+    }
+}
+
+void
+IBusFrontEnd::ibus_new_instance (int client_id)
+{
+    String sfid;
+    String encoding;
+
+    SCIM_DEBUG_FRONTEND (2) << " ibus_new_instance.\n";
+
+    if (m_receive_trans.get_data (sfid) &&
+        m_receive_trans.get_data (encoding)) {
         int siid = new_instance (sfid, encoding);
 
-        m_default_instance_map [encoding] = siid;
+        // Instance created OK.
+        if (siid >= 0) {
+            IBusInstanceRepository::iterator it =
+                std::lower_bound (m_socket_instance_repository.begin (),
+                                  m_socket_instance_repository.end (),
+                                  std::pair <int, int> (client_id, siid));
 
-        return siid;
-    } else if (get_instance_uuid (it->second) != sfid) {
-        replace_instance (it->second, sfid);
+            if (it == m_socket_instance_repository.end ())
+                m_socket_instance_repository.push_back (std::pair <int, int> (client_id, siid));
+            else
+                m_socket_instance_repository.insert (it, std::pair <int, int> (client_id, siid));
+
+            SCIM_DEBUG_FRONTEND (3) << "  InstanceID (" << siid << ").\n";
+
+            m_send_trans.put_data ((uint32)siid);
+            m_send_trans.put_command (SCIM_TRANS_CMD_OK);
+        }
     }
-    return it->second;
 }
 
-String
-IBusFrontEnd::init_ims (void)
+void
+IBusFrontEnd::ibus_delete_instance (int client_id)
 {
-    XIMStyle ims_styles_overspot [] = {
-        XIMPreeditPosition  | XIMStatusNothing,
-        XIMPreeditNothing   | XIMStatusNothing,
-        XIMPreeditPosition  | XIMStatusCallbacks,
-        XIMPreeditNothing   | XIMStatusCallbacks,
-        0
-    };
+    uint32 siid;
 
-    XIMStyle ims_styles_onspot [] = {
-        XIMPreeditPosition  | XIMStatusNothing,
-        XIMPreeditCallbacks | XIMStatusNothing,
-        XIMPreeditNothing   | XIMStatusNothing,
-        XIMPreeditPosition  | XIMStatusCallbacks,
-        XIMPreeditCallbacks | XIMStatusCallbacks,
-        XIMPreeditNothing   | XIMStatusCallbacks,
-        0
-    };
+    SCIM_DEBUG_FRONTEND (2) << " ibus_delete_instance.\n";
 
-    XIMEncoding ims_encodings[] = {
-        const_cast<char*> ("COMPOUND_TEXT"),
-        0
-    };
+    if (m_receive_trans.get_data (siid)) {
 
-    XIMStyles styles;
-    XIMEncodings encodings;
+        SCIM_DEBUG_FRONTEND (3) << "  InstanceID (" << siid << ").\n";
 
-    String locales;
+        m_current_instance = (int) siid;
 
-    locales = get_supported_locales ();
+        delete_instance ((int) siid);
 
-    SCIM_DEBUG_FRONTEND(1) << "Initializing XIMS: "
-            << m_server_name << " with locale (" << locales.length () << "): " << locales << " ...\n";
+        m_current_instance = -1;
 
-    // Initialize X Display and Root Windows.
-    if (m_xims != (XIMS) 0) {
-        throw FrontEndError (String ("IBus -- XIMS already initialized!"));
-       }
+        IBusInstanceRepository::iterator it =
+            std::lower_bound (m_socket_instance_repository.begin (),
+                              m_socket_instance_repository.end (),
+                              std::pair <int, int> (client_id, siid));
 
-    m_display = XOpenDisplay (NULL);
+        if (it != m_socket_instance_repository.end () &&
+            *it == std::pair <int, int> (client_id, siid))
+            m_socket_instance_repository.erase (it);
 
-    if (!m_display)
-        throw FrontEndError (String ("IBus -- Cannot open Display!"));
-
-    m_xims_window = XCreateSimpleWindow (m_display,
-                                         DefaultRootWindow (m_display),
-                                         -1, -1, 1, 1, 0, 0, 0);
-
-    if (!m_xims_window)
-        throw FrontEndError (String ("IBus -- Cannot create IMS Window!"));
-
-    XSetWindowAttributes attrs;
-    unsigned long attrmask;
-
-    attrs.override_redirect = true;
-    attrmask = CWOverrideRedirect;
-
-    XChangeWindowAttributes (m_display, m_xims_window, attrmask, &attrs);
-    XSelectInput (m_display, m_xims_window, KeyPressMask | KeyReleaseMask);
-
-    m_old_x_error_handler = XSetErrorHandler (x_error_handler);
-
-    // Initialize XIMS.
-    if (m_config->read (String (SCIM_CONFIG_FRONTEND_ON_THE_SPOT), true) &&
-        m_config->read (String (SCIM_CONFIG_FRONTEND_IBUS_ONTHESPOT), true)) {
-        styles.count_styles = sizeof (ims_styles_onspot)/sizeof (XIMStyle) - 1;
-        styles.supported_styles = ims_styles_onspot;
-    } else {
-        styles.count_styles = sizeof (ims_styles_overspot)/sizeof (XIMStyle) - 1;
-        styles.supported_styles = ims_styles_overspot;
+        m_send_trans.put_command (SCIM_TRANS_CMD_OK);
     }
-
-    encodings.count_encodings = sizeof (ims_encodings)/sizeof (XIMEncoding) - 1;
-    encodings.supported_encodings = ims_encodings;
-
-    m_xims = IMOpenIM(m_display,
-            IMModifiers, "Xi18n",
-            IMServerWindow, m_xims_window,
-            IMServerName, m_server_name.c_str (),
-            IMLocale, locales.c_str (),
-            IMServerTransport, "X/",
-            IMInputStyles, &styles,
-            IMEncodingList, &encodings,
-            IMProtocolHandler, ims_protocol_handler,
-            IMFilterEventMask, KeyPressMask | KeyReleaseMask,
-            NULL);
-
-    if (m_xims == (XIMS)NULL)
-        throw FrontEndError (String ("IBus -- failed to initialize XIM Server!"));
-
-    if (m_xims_dynamic) {
-        XIMTriggerKey xim_on_key_list[10];
-        XIMTriggerKey xim_off_key_list[10];
- 
-        XIMTriggerKeys xim_on_keys;
-        XIMTriggerKeys xim_off_keys;
- 
-        uint32 count_trigger_keys, count_on_keys, count_off_keys;
- 
-        KeyEventList keys;
- 
-        m_frontend_hotkey_matcher.find_hotkeys (SCIM_FRONTEND_HOTKEY_TRIGGER, keys);
- 
-        for (count_trigger_keys=0; count_trigger_keys < 10 && count_trigger_keys < keys.size (); ++count_trigger_keys) {
-            XKeyEvent xkey = scim_x11_keyevent_scim_to_x11 (m_display, keys [count_trigger_keys]);
-            xim_on_key_list [count_trigger_keys].keysym = keys [count_trigger_keys].code;
-            xim_on_key_list [count_trigger_keys].modifier = xkey.state;
-            xim_on_key_list [count_trigger_keys].modifier_mask = xkey.state;
-        }
- 
-        m_frontend_hotkey_matcher.find_hotkeys (SCIM_FRONTEND_HOTKEY_ON, keys);
-
-        for (count_on_keys=count_trigger_keys; count_on_keys < 10 && (count_on_keys - count_trigger_keys) < keys.size (); ++count_on_keys) {
-            XKeyEvent xkey = scim_x11_keyevent_scim_to_x11 (m_display, keys [count_on_keys - count_trigger_keys]);
-            xim_on_key_list [count_on_keys].keysym = keys [count_on_keys - count_trigger_keys].code;
-            xim_on_key_list [count_on_keys].modifier = xkey.state;
-            xim_on_key_list [count_on_keys].modifier_mask = xkey.state;
-        }
- 
-        m_frontend_hotkey_matcher.find_hotkeys (SCIM_FRONTEND_HOTKEY_OFF, keys);
-
-        for (count_off_keys=0; count_off_keys < 10 && count_off_keys < keys.size (); ++count_off_keys) {
-            XKeyEvent xkey = scim_x11_keyevent_scim_to_x11 (m_display, keys [count_off_keys]);
-            xim_off_key_list [count_off_keys].keysym = keys [count_off_keys].code;
-            xim_off_key_list [count_off_keys].modifier = xkey.state;
-            xim_off_key_list [count_off_keys].modifier_mask = xkey.state;
-        }
- 
-        xim_on_keys.count_keys = count_on_keys;
-        xim_on_keys.keylist = xim_on_key_list;
-
-        xim_off_keys.count_keys = count_off_keys;
-        xim_off_keys.keylist = xim_off_key_list;
-
-        IMSetIMValues(m_xims, IMOnKeysList, &xim_on_keys, IMOffKeysList, &xim_off_keys, NULL);
-    }
-
-    return String (DisplayString (m_display));
 }
 
-bool
-IBusFrontEnd::filter_hotkeys (X11IC *ic, const KeyEvent &scimkey)
+void
+IBusFrontEnd::ibus_delete_all_instances (int client_id)
 {
-    bool ok = false;
+    SCIM_DEBUG_FRONTEND (2) << " ibus_delete_all_instances.\n";
 
-    if (!is_focused_ic (ic)) return false;
+    IBusInstanceRepository::iterator it;
 
-    m_frontend_hotkey_matcher.push_key_event (scimkey);
-    m_imengine_hotkey_matcher.push_key_event (scimkey);
+    IBusInstanceRepository::iterator lit =
+        std::lower_bound (m_socket_instance_repository.begin (),
+                          m_socket_instance_repository.end (),
+                          std::pair <int, int> (client_id, 0));
 
-    FrontEndHotkeyAction hotkey_action = m_frontend_hotkey_matcher.get_match_result ();
+    IBusInstanceRepository::iterator uit =
+        std::upper_bound (m_socket_instance_repository.begin (),
+                          m_socket_instance_repository.end (),
+                          std::pair <int, int> (client_id, INT_MAX));
 
-    // Match trigger and show factory menu hotkeys.
-    if (hotkey_action == SCIM_FRONTEND_HOTKEY_TRIGGER) {
-        if (!ic->xims_on)
-            ims_turn_on_ic (ic);
+    if (lit != uit) {
+        for (it = lit; it != uit; ++it) {
+            m_current_instance = it->second;
+            delete_instance (it->second);
+        }
+        m_current_instance = -1;
+        m_socket_instance_repository.erase (lit, uit);
+        m_send_trans.put_command (SCIM_TRANS_CMD_OK);
+    }
+}
+
+void
+IBusFrontEnd::ibus_process_key_event (int /*client_id*/)
+{
+    uint32   siid;
+    KeyEvent event;
+
+    SCIM_DEBUG_FRONTEND (2) << " ibus_process_key_event.\n";
+
+    if (m_receive_trans.get_data (siid) &&
+        m_receive_trans.get_data (event)) {
+
+        SCIM_DEBUG_FRONTEND (3) << "  SI (" << siid << ") KeyEvent ("
+            << event.code << "," << event.mask << ").\n";
+
+        m_current_instance = (int) siid;
+
+        if (process_key_event ((int) siid, event))
+            m_send_trans.put_command (SCIM_TRANS_CMD_OK);
         else
-            ims_turn_off_ic (ic);
-        ok = true;
-    } else if (hotkey_action == SCIM_FRONTEND_HOTKEY_ON) {
-        if (!ic->xims_on) ims_turn_on_ic (ic);
-        ok = true;
-    } else if (hotkey_action == SCIM_FRONTEND_HOTKEY_OFF) {
-        if (ic->xims_on) ims_turn_off_ic (ic);
-        ok = true;
-    } else if (hotkey_action == SCIM_FRONTEND_HOTKEY_NEXT_FACTORY) {
-        String encoding = scim_get_locale_encoding (ic->locale);
-        String language = scim_get_locale_language (ic->locale);
-        String sfid = get_next_factory ("", encoding, get_instance_uuid (ic->siid));
-        if (validate_factory (sfid, encoding)) {
-            ims_turn_off_ic (ic);
-            replace_instance (ic->siid, sfid);
-            m_panel_client.register_input_context (ic->icid, get_instance_uuid (ic->siid));
-            set_ic_capabilities (ic);
-            set_default_factory (language, sfid);
-            ims_turn_on_ic (ic);
-        }
-        ok = true;
-    } else if (hotkey_action == SCIM_FRONTEND_HOTKEY_PREVIOUS_FACTORY) {
-        String encoding = scim_get_locale_encoding (ic->locale);
-        String language = scim_get_locale_language (ic->locale);
-        String sfid = get_previous_factory ("", encoding, get_instance_uuid (ic->siid));
-        if (validate_factory (sfid, encoding)) {
-            ims_turn_off_ic (ic);
-            replace_instance (ic->siid, sfid);
-            m_panel_client.register_input_context (ic->icid, get_instance_uuid (ic->siid));
-            set_ic_capabilities (ic);
-            set_default_factory (language, sfid);
-            ims_turn_on_ic (ic);
-        }
-        ok = true;
-    } else if (hotkey_action == SCIM_FRONTEND_HOTKEY_SHOW_FACTORY_MENU) {
-        panel_req_show_factory_menu (ic);
-        ok = true;
-    } else if (m_imengine_hotkey_matcher.is_matched ()) {
-        String encoding = scim_get_locale_encoding (ic->locale);
-        String language = scim_get_locale_language (ic->locale);
-        String sfid = m_imengine_hotkey_matcher.get_match_result ();
-        if (validate_factory (sfid, encoding)) {
-            ims_turn_off_ic (ic); 
-            replace_instance (ic->siid, sfid);
-            m_panel_client.register_input_context (ic->icid, get_instance_uuid (ic->siid));
-            set_ic_capabilities (ic);
-            set_default_factory (language, sfid);
-            ims_turn_on_ic (ic);
-        }
-        ok = true;
-    }
-    return ok;
-}
+            m_send_trans.put_command (SCIM_TRANS_CMD_FAIL);
 
-bool
-IBusFrontEnd::filter_hotkeys (IBusInputContext *ic, const KeyEvent &scimkey)
-{
-    log_func();
-
-    bool ok = false;
-
-    if (!is_focused_ic (ic)) return false;
-
-    m_frontend_hotkey_matcher.push_key_event (scimkey);
-    m_imengine_hotkey_matcher.push_key_event (scimkey);
-
-    FrontEndHotkeyAction hotkey_action = m_frontend_hotkey_matcher.get_match_result ();
-
-    // Match trigger and show factory menu hotkeys.
-    if (hotkey_action == SCIM_FRONTEND_HOTKEY_TRIGGER) {
-        if (!ic->is_on())
-            ims_turn_on_ic (ic);
-        else
-            ims_turn_off_ic (ic);
-        ok = true;
-    } else if (hotkey_action == SCIM_FRONTEND_HOTKEY_ON) {
-        if (!ic->is_on()) ims_turn_on_ic (ic);
-        ok = true;
-    } else if (hotkey_action == SCIM_FRONTEND_HOTKEY_OFF) {
-        if (ic->is_on()) ims_turn_off_ic (ic);
-        ok = true;
-    } else if (hotkey_action == SCIM_FRONTEND_HOTKEY_NEXT_FACTORY) {
-        String encoding = scim_get_locale_encoding (ic->get_locale());
-        String language = scim_get_locale_language (ic->get_locale());
-        String sfid = get_next_factory ("", encoding, get_instance_uuid (ic->get_siid()));
-        if (validate_factory (sfid, encoding)) {
-            ims_turn_off_ic (ic);
-            replace_instance (ic->get_siid(), sfid);
-            m_panel_client.register_input_context (ic->get_id(), get_instance_uuid (ic->get_siid()));
-            input_context_capability_updated (ic);
-            //set_default_factory (language, sfid);
-            ims_turn_on_ic (ic);
-        }
-        ok = true;
-    } else if (hotkey_action == SCIM_FRONTEND_HOTKEY_PREVIOUS_FACTORY) {
-        String encoding = scim_get_locale_encoding (ic->get_locale());
-        String language = scim_get_locale_language (ic->get_locale());
-        String sfid = get_previous_factory ("", encoding, get_instance_uuid (ic->get_siid()));
-        if (validate_factory (sfid, encoding)) {
-            ims_turn_off_ic (ic);
-            replace_instance (ic->get_siid(), sfid);
-            m_panel_client.register_input_context (ic->get_id(), get_instance_uuid (ic->get_siid()));
-            input_context_capability_updated (ic);
-            //set_default_factory (language, sfid);
-            ims_turn_on_ic (ic);
-        }
-        ok = true;
-    } else if (hotkey_action == SCIM_FRONTEND_HOTKEY_SHOW_FACTORY_MENU) {
-        panel_req_show_factory_menu (ic);
-        ok = true;
-    } else if (m_imengine_hotkey_matcher.is_matched ()) {
-        String encoding = scim_get_locale_encoding (ic->get_locale());
-        String language = scim_get_locale_language (ic->get_locale());
-        String sfid = m_imengine_hotkey_matcher.get_match_result ();
-        if (validate_factory (sfid, encoding)) {
-            ims_turn_off_ic (ic); 
-            replace_instance (ic->get_siid(), sfid);
-            m_panel_client.register_input_context (ic->get_id(), get_instance_uuid (ic->get_siid()));
-            //input_context_capability_updated (ic->get_id());
-            set_default_factory (language, sfid);
-            ims_turn_on_ic (ic);
-        }
-        ok = true;
-    }
-
-    return ok;
-}
-
-int
-IBusFrontEnd::ims_open_handler (XIMS ims, IMOpenStruct *call_data)
-{
-    SCIM_DEBUG_FRONTEND(2) << " IMS Open handler: LANG=" << call_data->lang.name
-                 << " Connect ID=" << call_data->connect_id << "\n";
-
-    m_ic_manager.new_connection (call_data);
-    return 1;
-}
-
-int
-IBusFrontEnd::ims_close_handler (XIMS ims, IMCloseStruct *call_data)
-{
-    SCIM_DEBUG_FRONTEND(2) << " IMS Close handler: Connect ID="
-            << call_data->connect_id << "\n";
-
-    m_ic_manager.delete_connection (call_data);
-    return 1;
-}
-
-int
-IBusFrontEnd::ims_create_ic_handler (XIMS ims, IMChangeICStruct *call_data)
-{
-    String locale = m_ic_manager.get_connection_locale (call_data->connect_id);
-    String language = scim_get_locale_language (locale);
-    String encoding = scim_get_locale_encoding (locale);
-
-    SCIM_DEBUG_FRONTEND(2) << " IMS Create handler: Encoding=" << encoding << "\n";
-
-    if (language.empty () || encoding.empty ())
-        return 0;
-
-    int siid = -1;
-
-    if (m_shared_input_method) {
-        siid = get_default_instance (language, encoding);
-    } else {
-        String sfid = get_default_factory (language, encoding);
-        siid = new_instance (sfid, encoding);
-    }
-
-    if (siid >= 0) {
-        uint32 attrs = m_ic_manager.create_ic (call_data, siid);
-
-        X11IC *ic = m_ic_manager.find_ic (call_data->icid);
-
-        SCIM_DEBUG_FRONTEND(2) << " IMS Create handler OK: SIID="
-            << siid << " ICID = " << ic->icid << " Connect ID=" << call_data->connect_id  << "\n";
-
-        m_panel_client.prepare (ic->icid);
-
-        m_panel_client.register_input_context (ic->icid, get_instance_uuid (siid));
-
-        if (attrs & SCIM_X11_IC_INPUT_STYLE)
-            set_ic_capabilities (ic);
-
-        m_panel_client.send ();
-
-        if (m_shared_input_method) {
-            ic->xims_on = m_config->read (String (SCIM_CONFIG_FRONTEND_IM_OPENED_BY_DEFAULT), ic->xims_on);
-            ic->shared_siid = true;
-        }
-
-        return 1;
-    } else {
-        SCIM_DEBUG_FRONTEND(2) << " IMS Create handler Failed: "
-            << " Connect ID=" << call_data->connect_id  << "\n";
-    }
-    return 0;
-}
-
-int
-IBusFrontEnd::ims_set_ic_values_handler (XIMS ims, IMChangeICStruct *call_data)
-{
-    uint32 changes;
-
-    X11IC *ic = m_ic_manager.find_ic (call_data->icid);
-
-    if (!validate_ic (ic)) {
-        SCIM_DEBUG_FRONTEND(1) << "Cannot find IC for icid " << call_data->icid << "\n";
-        return 0;
-    }
-
-    changes = m_ic_manager.set_ic_values (call_data);
-
-    if (changes & SCIM_X11_IC_ENCODING) {
-        SCIM_DEBUG_FRONTEND(1) << "Cannot change IC encoding on the fly!\n";
-        return 0;
-    }
-
-    SCIM_DEBUG_FRONTEND(2) << " IMS Set IC values handler, ICID="
-                    << call_data->icid << " Connect ID="
-                    << call_data->connect_id << " Changes="
-                    << changes << "\n";
-
-    m_panel_client.prepare (ic->icid);
-
-    //It's focus IC
-    if (is_focused_ic (ic)) {
-        if (changes & SCIM_X11_IC_PRE_SPOT_LOCATION)
-            panel_req_update_spot_location (ic);
-    }
-
-    // Update the client capabilities, if the input style was changed.
-    if (changes & SCIM_X11_IC_INPUT_STYLE)
-        set_ic_capabilities (ic);
-
-    m_panel_client.send ();
-
-    return 1;
-}
-
-int
-IBusFrontEnd::ims_get_ic_values_handler (XIMS ims, IMChangeICStruct *call_data)
-{
-    SCIM_DEBUG_FRONTEND(2) << " IMS Get IC values handler, ICID="
-                    << call_data->icid << " Connect ID="
-                    << call_data->connect_id << "\n";
-
-    m_ic_manager.get_ic_values (call_data);
-    return 1;
-}
-
-int
-IBusFrontEnd::ims_destroy_ic_handler (XIMS ims, IMDestroyICStruct *call_data)
-{
-    X11IC *ic = m_ic_manager.find_ic (call_data->icid);
-
-    SCIM_DEBUG_FRONTEND(2) << " IMS Destroy IC handler, ICID="
-                    << call_data->icid << " Connect ID=" 
-                    << call_data->connect_id << "\n";
-
-    if (!validate_ic (ic)) {
-        SCIM_DEBUG_FRONTEND(1) << "Cannot find IC for icid " << call_data->icid << "\n";
-        return 0;
-    }
-
-    m_panel_client.prepare (ic->icid);
-
-    if (is_focused_ic (ic)) {
-        focus_out (ic->siid);
-        m_panel_client.turn_off (ic->icid);
-        m_panel_client.focus_out (ic->icid);
-    }
-
-    X11IC *old_focus = m_focus_ic;
-
-    m_focus_ic = ic;
-
-    if (!ic->shared_siid) delete_instance (ic->siid);
-
-    m_panel_client.remove_input_context (ic->icid);
-    m_panel_client.send ();
-
-    if (is_focused_ic (ic))
-        m_focus_ic = 0;
-    else
-        m_focus_ic = old_focus;
-
-    m_ic_manager.destroy_ic (call_data);
-    return 1;
-}
-
-int
-IBusFrontEnd::ims_set_ic_focus_handler (XIMS ims, IMChangeFocusStruct *call_data)
-{
-    SCIM_DEBUG_FRONTEND(2) << " IMS Set IC focus handler, ID="
-                    << call_data->icid << " Connect ID="
-                    << call_data->connect_id << "\n";
-    
-    X11IC *ic =m_ic_manager.find_ic (call_data->icid);
-
-    if (!validate_ic (ic)) {
-        SCIM_DEBUG_FRONTEND(1) << "Cannot find IC for icid " << call_data->icid << "\n";
-        return 0;
-    }
-
-    if (validate_ic (m_focus_ic) && m_focus_ic->icid != ic->icid) {
-        m_panel_client.prepare (m_focus_ic->icid);
-        stop_ic (m_focus_ic);
-        m_panel_client.focus_out (m_focus_ic->icid);
-        m_panel_client.send ();
-    }
-
-    String encoding = scim_get_locale_encoding (ic->locale);
-    String language = scim_get_locale_language (ic->locale);
-    bool need_reg = false;
-    bool need_cap = false;
-    bool need_reset = false;
-
-    m_focus_ic = ic;
-
-    m_panel_client.prepare (ic->icid);
-
-    if (m_shared_input_method) {
-        SCIM_DEBUG_FRONTEND(3) << "Shared input method.\n";
-
-        if (!ic->shared_siid) {
-            delete_instance (ic->siid);
-            ic->shared_siid = true;
-        }
-
-        ic->siid = get_default_instance (language, encoding);
-        ic->onspot_preedit_started = false;
-        ic->onspot_preedit_length = 0;
-        ic->onspot_caret = 0;
-
-        ic->xims_on = m_config->read (String (SCIM_CONFIG_FRONTEND_IM_OPENED_BY_DEFAULT), ic->xims_on);
-
-        need_reg = true;
-        need_cap = true;
-        need_reset = true;
-    } else if (ic->shared_siid) {
-        String sfid = get_default_factory (language, encoding);
-        ic->siid = new_instance (sfid, encoding);
-        ic->onspot_preedit_started = false;
-        ic->onspot_preedit_length = 0;
-        ic->onspot_caret = 0;
-        ic->shared_siid = false;
-        need_reg = true;
-        need_cap = true;
-    }
-
-    panel_req_focus_in (ic);
-
-    if (need_reset) reset (ic->siid);
-    if (need_cap) set_ic_capabilities (ic);
-    if (need_reg) m_panel_client.register_input_context (ic->icid, get_instance_uuid (ic->siid));
-
-    if (ic->xims_on) {
-        start_ic (ic);
-    } else {
-    	panel_req_update_factory_info (ic);
-        m_panel_client.turn_off (ic->icid);
-    }
-
-    m_panel_client.send ();
-
-    return 1;
-}
-
-int
-IBusFrontEnd::ims_unset_ic_focus_handler (XIMS ims, IMChangeFocusStruct *call_data)
-{
-    SCIM_DEBUG_FRONTEND(2) << " IMS Unset IC focus handler, ID="
-                    << call_data->icid << " Connect ID="
-                    << call_data->connect_id << "\n";
-
-    X11IC *ic =m_ic_manager.find_ic (call_data->icid);
-
-    if (!validate_ic (ic)) {
-        SCIM_DEBUG_FRONTEND(1) << "Cannot find IC for icid " << call_data->icid << "\n";
-        return 0;
-    }
-
-    if (is_focused_ic (ic)) {
-        m_panel_client.prepare (ic->icid);
-        stop_ic (ic);
-        m_panel_client.focus_out (ic->icid);
-        m_panel_client.send ();
-        m_focus_ic = 0;
-    }
-
-    return 1;
-}
-
-int
-IBusFrontEnd::ims_reset_ic_handler (XIMS ims, IMResetICStruct *call_data)
-{
-    SCIM_DEBUG_FRONTEND(2) << " IMS Reset IC handler, ID="
-                    << call_data->icid << " Connect ID="
-                    << call_data->connect_id << "\n";
-    
-    X11IC *ic =m_ic_manager.find_ic (call_data->icid);
-
-    if (!validate_ic (ic)) {
-        SCIM_DEBUG_FRONTEND(1) << "Cannot find IC for icid " << call_data->icid << "\n";
-        return 0;
-    }
-
-    m_panel_client.prepare (ic->icid);
-    reset (ic->siid);
-    m_panel_client.send ();
-
-    return 1;
-}
-
-int
-IBusFrontEnd::ims_trigger_notify_handler (XIMS ims, IMTriggerNotifyStruct *call_data)
-{
-    SCIM_DEBUG_FRONTEND(2) << " IMS Trigger notify handler, Flag="
-                    << call_data->flag << " KeyIndex="
-                    << call_data->key_index << " EventMask="
-                    << call_data->event_mask << "\n";
-
-    X11IC *ic =m_ic_manager.find_ic (call_data->icid);
-
-    if (!validate_ic (ic)) {
-        SCIM_DEBUG_FRONTEND(1) << "Cannot find IC for icid " << call_data->icid << "\n";
-        return 0;
-    }
-
-    int ret = 0;
-
-    m_panel_client.prepare (ic->icid);
-
-    if (!call_data->flag) {
-        ims_turn_on_ic (ic);
-        ret = 1; 
-    } else {
-        ims_turn_off_ic (ic);
-        ret = 1;
-    }
-
-    m_panel_client.send ();
-
-    return ret;
-}
-
-int
-IBusFrontEnd::ims_forward_event_handler (XIMS ims, IMForwardEventStruct *call_data)
-{
-    SCIM_DEBUG_FRONTEND(2) << " IMS Forward event handler, ICID="
-                    << call_data->icid << " Connect ID="
-                    << call_data->connect_id << " SerialNo="
-                    << call_data->serial_number << "EventType="
-                    << call_data->event.type << "\n";
-    
-    if (call_data->event.type != KeyPress && call_data->event.type != KeyRelease)
-        return 1;
-
-    X11IC *ic = m_ic_manager.find_ic (call_data->icid);
-
-    if (!validate_ic (ic)) {
-        SCIM_DEBUG_FRONTEND(1) << "Cannot find IC for icid " << call_data->icid << "\n";
-        return 0;
-    }
-
-    // If the ic is not focused, then return.
-    if (!is_focused_ic (ic)) {
-        SCIM_DEBUG_FRONTEND(1) << "IC " << call_data->icid << " is not focused, focus it first.\n";
-        return 1;
-    }
-
-    XKeyEvent *event = (XKeyEvent*) &(call_data->event);
-    KeyEvent scimkey = scim_x11_keyevent_x11_to_scim (m_display, *event);
-
-    scimkey.mask  &= m_valid_key_mask;
-
-    // Set keyboard layout information.
-    scimkey.layout = m_keyboard_layout;
-
-    SCIM_DEBUG_FRONTEND(3)  << "  KeyEvent:\n"
-                            << "   Type=" << event->type << " Display=" << event->display << " Serial=" << event->serial << " Send=" << event->send_event << "\n"
-                            << "      X=" << event->x << " Y=" << event->y << " XRoot=" << event->x_root << " YRoot=" << event->y_root << "\n"
-                            << "   Time=" << event->time << " SameScreen=" << event->same_screen << " SubWin=" << event->subwindow << " Win=" << event->window << "\n"
-                            << "   Root=" << event->root << " KeyCode=" << event->keycode << " State=" << event->state << "\n"
-                            << "  scimKeyEvent=(" << scimkey.code << "," << scimkey.mask << ")\n";
-
-    m_panel_client.prepare (ic->icid);
-
-    if (!filter_hotkeys (ic, scimkey)) {
-        if (!ic->xims_on || !process_key_event (ic->siid, scimkey)) {
-            if (!m_fallback_instance->process_key_event (scimkey))
-                IMForwardEvent (ims, (XPointer) call_data);
-        }
-    }
-
-    m_panel_client.send ();
-
-    return 1;
-}
-
-int
-IBusFrontEnd::ims_sync_reply_handler (XIMS ims, IMSyncXlibStruct *call_data)
-{
-    SCIM_DEBUG_FRONTEND(2) << " IMS Sync reply handler.\n";
-    return 1;
-}
-
-int
-IBusFrontEnd::ims_preedit_start_reply_handler (XIMS ims, IMPreeditCBStruct *call_data)
-{
-    SCIM_DEBUG_FRONTEND(2) << " IMS Preedit start reply handler.\n";
-    return 1;
-}
-
-int
-IBusFrontEnd::ims_preedit_caret_reply_handler (XIMS ims, IMPreeditCBStruct *call_data)
-{
-    SCIM_DEBUG_FRONTEND(2) << " IMS Preedit caret reply handler.\n";
-    return 1;
-}
-
-void
-IBusFrontEnd::ims_commit_string (const X11IC *ic, const WideString& str)
-{
-    IMCommitStruct cms;
-    XTextProperty tp;
-
-    SCIM_DEBUG_FRONTEND(2) << " IMS Committing string.\n";
-
-    if (ims_wcstocts (tp, ic, str)) {
-        memset (&cms, 0, sizeof (cms));
-        cms.major_code = XIM_COMMIT;
-        cms.icid = ic->icid;
-        cms.connect_id = ic->connect_id;
-        cms.flag = XimLookupChars;
-        cms.commit_string = (char *) tp.value;
-        IMCommitString (m_xims, (XPointer) & cms);
-        XFree (tp.value);
+        m_current_instance = -1;
     }
 }
 
 void
-IBusFrontEnd::ims_forward_key_event (const X11IC *ic, const KeyEvent &key)
+IBusFrontEnd::ibus_move_preedit_caret (int /*client_id*/)
 {
-    IMForwardEventStruct fe;
-    XEvent xkp;
+    uint32 siid;
+    uint32 caret;
 
-    XKeyEvent *event = (XKeyEvent*) (&xkp);
+    SCIM_DEBUG_FRONTEND (2) << " ibus_move_preedit_caret.\n";
 
-    //create event
-    xkp.xkey = scim_x11_keyevent_scim_to_x11 (m_display, key);
+    if (m_receive_trans.get_data (siid) &&
+        m_receive_trans.get_data (caret)) {
 
-    memset (&fe, 0, sizeof (fe));
-    fe.major_code = XIM_FORWARD_EVENT;
-    fe.icid = ic->icid;
-    fe.connect_id = ic->connect_id;
-    fe.sync_bit = 0;
-    fe.serial_number = 0L;
+        SCIM_DEBUG_FRONTEND (3) << "  SI (" << siid
+            << ") Caret (" << caret << ").\n";
 
-    if (ic->focus_win)
-        xkp.xkey.window = ic->focus_win;
-    else if (ic->client_win)
-        xkp.xkey.window = ic->client_win;
+        m_current_instance = (int) siid;
 
-    memcpy (&(fe.event), &xkp, sizeof (fe.event));
-    IMForwardEvent (m_xims, (XPointer) & fe);
-}
+        move_preedit_caret ((int) siid, caret); 
+        m_send_trans.put_command (SCIM_TRANS_CMD_OK);
 
-bool
-IBusFrontEnd::ims_wcstocts (XTextProperty &tp,const X11IC *ic, const WideString& src)
-{
-    if (!validate_ic (ic)) return false;
-
-    String last = String (setlocale (LC_CTYPE, 0));
-
-    if (!setlocale (LC_CTYPE, ic->locale.c_str ())) {
-        SCIM_DEBUG_FRONTEND(3) << "  wcstocts -- unspported locale " << ic->locale.c_str () << "\n";
-
-        setlocale (LC_CTYPE, last.c_str ());
-        return false;
+        m_current_instance = -1;
     }
+}
 
-    int ret;
+void
+IBusFrontEnd::ibus_select_candidate (int /*client_id*/)
+{
+    uint32 siid;
+    uint32 item;
 
-    if (m_wchar_ucs4_equal && !m_broken_wchar) {
-        wchar_t *wclist [1];
+    SCIM_DEBUG_FRONTEND (2) << " ibus_select_candidate.\n";
 
-        SCIM_DEBUG_FRONTEND(3) << "  Convert WideString to COMPOUND_TEXT -- Using XwcTextListToTextProperty.\n";
+    if (m_receive_trans.get_data (siid) &&
+        m_receive_trans.get_data (item)) {
 
-        wclist [0] = new wchar_t [src.length () + 1];
-        memcpy (wclist [0], src.data (), sizeof (wchar_t) * src.length ());
-        wclist [0][src.length ()] = 0;
-        ret = XwcTextListToTextProperty (m_display, wclist, 1, XCompoundTextStyle, &tp);
-        delete [] wclist [0];
-    } else {
-        char *clist [1];
-        String mbs;
+        SCIM_DEBUG_FRONTEND (3) << "  SI (" << siid << ") Item (" << item << ").\n";
 
-        SCIM_DEBUG_FRONTEND(3) << "  Convert WideString to COMPOUND_TEXT -- Using XmbTextListToTextProperty.\n";
+        m_current_instance = (int) siid;
 
-        if (!m_iconv.set_encoding (ic->encoding)) {
-            SCIM_DEBUG_FRONTEND(3) << "  Convert WideString to COMPOUND_TEXT -- Cannot initialize iconv for encoding "
-                      << ic->encoding << "\n";
+        select_candidate ((int) siid, item); 
+        m_send_trans.put_command (SCIM_TRANS_CMD_OK);
 
-            setlocale (LC_CTYPE, last.c_str ());
-            return false;
-        }
-
-        m_iconv.convert (mbs, src);
-        clist [0] = (char *) mbs.c_str ();
-        ret = XmbTextListToTextProperty (m_display, clist, 1, XCompoundTextStyle, &tp);
+        m_current_instance = -1;
     }
-
-    setlocale (LC_CTYPE, last.c_str ());
-    return ret >= 0;
-}
-
-bool
-IBusFrontEnd::ims_is_preedit_callback_mode (const X11IC *ic)
-{
-    return validate_ic (ic) && (ic->input_style & XIMPreeditCallbacks);
-}
-
-bool IBusFrontEnd::ims_is_preedit_callback_mode (IBusInputContext *ic)
-{
-    log_func();
-
-    return validate_ic (ic) && !ic->is_client_commit_preedit();
 }
 
 void
-IBusFrontEnd::ims_preedit_callback_start (X11IC *ic)
+IBusFrontEnd::ibus_update_lookup_table_page_size (int /*client_id*/)
 {
-    if (!validate_ic (ic) || ic->onspot_preedit_started) return;
+    uint32 siid;
+    uint32 size;
 
-    ic->onspot_preedit_started = true;
+    SCIM_DEBUG_FRONTEND (2) << " ibus_update_lookup_table_page_size.\n";
 
-    SCIM_DEBUG_FRONTEND(2) << " Onspot preedit start, ICID="
-            << ic->icid << " Connect ID=" << ic->connect_id << "\n";
+    if (m_receive_trans.get_data (siid) &&
+        m_receive_trans.get_data (size)) {
 
-    IMPreeditCBStruct pcb;
+        SCIM_DEBUG_FRONTEND (3) << "  SI (" << siid << ") PageSize (" << size << ").\n";
 
-    pcb.major_code        = XIM_PREEDIT_START;
-    pcb.minor_code        = 0;
-    pcb.connect_id        = ic->connect_id;
-    pcb.icid              = ic->icid;
-    pcb.todo.return_value = 0;
-    IMCallCallback (m_xims, (XPointer) & pcb);
+        m_current_instance = (int) siid;
+
+        update_lookup_table_page_size ((int) siid, size); 
+        m_send_trans.put_command (SCIM_TRANS_CMD_OK);
+
+        m_current_instance = -1;
+    }
 }
 
 void
-IBusFrontEnd::ims_preedit_callback_start (IBusInputContext *ic)
+IBusFrontEnd::ibus_lookup_table_page_up (int /*client_id*/)
 {
-    log_func_incomplete();
+    uint32 siid;
 
-    if (!validate_ic (ic) || ic->is_onspot_preedit_started()) return;
+    SCIM_DEBUG_FRONTEND (2) << " ibus_lookup_table_page_up.\n";
 
-    ic->set_onspot_preedit_started(true);
+    if (m_receive_trans.get_data (siid)) {
 
-    SCIM_DEBUG_FRONTEND(2) << " Onspot preedit start, ICID="
-            << ic->get_id() << "\n";
+        SCIM_DEBUG_FRONTEND (3) << "  SI (" << siid << ").\n";
 
-    //IMPreeditCBStruct pcb;
+        m_current_instance = (int) siid;
 
-    //pcb.major_code        = XIM_PREEDIT_START;
-    //pcb.minor_code        = 0;
-    //pcb.connect_id        = ic->connect_id;
-    //pcb.icid              = ic->icid;
-    //pcb.todo.return_value = 0;
-    //IMCallCallback (m_xims, (XPointer) & pcb);
+        lookup_table_page_up ((int) siid); 
+        m_send_trans.put_command (SCIM_TRANS_CMD_OK);
+
+        m_current_instance = -1;
+    }
 }
 
 void
-IBusFrontEnd::ims_preedit_callback_done (X11IC *ic)
+IBusFrontEnd::ibus_lookup_table_page_down (int /*client_id*/)
 {
-    if (!validate_ic (ic) || !ic->onspot_preedit_started) return;
+    uint32 siid;
 
-    SCIM_DEBUG_FRONTEND(2) << " Onspot preedit done, ICID="
-            << ic->icid << " Connect ID=" << ic->connect_id << "\n";
+    SCIM_DEBUG_FRONTEND (2) << " ibus_lookup_table_page_down.\n";
 
-    // First clear the preedit string.
-    ims_preedit_callback_draw (ic, WideString ());
+    if (m_receive_trans.get_data (siid)) {
 
-    ic->onspot_preedit_started = false;
+        SCIM_DEBUG_FRONTEND (3) << "  SI (" << siid << ").\n";
 
-    IMPreeditCBStruct pcb;
+        m_current_instance = (int) siid;
 
-    pcb.major_code        = XIM_PREEDIT_DONE;
-    pcb.minor_code        = 0;
-    pcb.connect_id        = ic->connect_id;
-    pcb.icid              = ic->icid;
-    pcb.todo.return_value = 0;
-    IMCallCallback (m_xims, (XPointer) & pcb);
+        lookup_table_page_down ((int) siid); 
+        m_send_trans.put_command (SCIM_TRANS_CMD_OK);
+
+        m_current_instance = -1;
+    }
 }
 
 void
-IBusFrontEnd::ims_preedit_callback_done (IBusInputContext *ic)
+IBusFrontEnd::ibus_reset (int /*client_id*/)
 {
-    log_func_incomplete();
+    uint32 siid;
 
-    if (!validate_ic (ic) || !ic->is_onspot_preedit_started()) return;
+    SCIM_DEBUG_FRONTEND (2) << " ibus_reset.\n";
 
-    SCIM_DEBUG_FRONTEND(2) << " Onspot preedit done, ICID="
-            << ic->get_id() << "\n";
+    if (m_receive_trans.get_data (siid)) {
 
-    // First clear the preedit string.
-    //ims_preedit_callback_draw (ic, WideString ());
+        SCIM_DEBUG_FRONTEND (3) << "  SI (" << siid << ").\n";
 
-    ic->set_onspot_preedit_started(false);
+        m_current_instance = (int) siid;
 
-    //IMPreeditCBStruct pcb;
+        reset ((int) siid); 
+        m_send_trans.put_command (SCIM_TRANS_CMD_OK);
 
-    //pcb.major_code        = XIM_PREEDIT_DONE;
-    //pcb.minor_code        = 0;
-    //pcb.connect_id        = ic->connect_id;
-    //pcb.icid              = ic->icid;
-    //pcb.todo.return_value = 0;
-    //IMCallCallback (m_xims, (XPointer) & pcb);
+        m_current_instance = -1;
+    }
 }
 
 void
-IBusFrontEnd::ims_preedit_callback_draw (X11IC *ic, const WideString& str, const AttributeList & attrs)
+IBusFrontEnd::ibus_focus_in (int /*client_id*/)
 {
-    if (!validate_ic (ic)) return;
+    uint32 siid;
 
-    if (!ic->onspot_preedit_started)
-        ims_preedit_callback_start (ic);
+    SCIM_DEBUG_FRONTEND (2) << " ibus_focus_in.\n";
 
-    SCIM_DEBUG_FRONTEND(2) << " Onspot preedit draw, ICID="
-            << ic->icid << " Connect ID=" << ic->connect_id << "\n";
+    if (m_receive_trans.get_data (siid)) {
 
-    IMPreeditCBStruct pcb;
-    XIMText text;
-    XIMFeedback *feedback;
-    XIMFeedback attr;
-    XTextProperty tp;
+        SCIM_DEBUG_FRONTEND (3) << "  SI (" << siid << ").\n";
 
-    unsigned int i, j, len;
+        m_current_instance = (int) siid;
 
-    len = str.length ();
-    if (!len && !ic->onspot_preedit_length)
+        focus_in ((int) siid); 
+        m_send_trans.put_command (SCIM_TRANS_CMD_OK);
+
+        m_current_instance = -1;
+    }
+}
+
+void
+IBusFrontEnd::ibus_focus_out (int /*client_id*/)
+{
+    uint32 siid;
+
+    SCIM_DEBUG_FRONTEND (2) << " ibus_focus_out.\n";
+
+    if (m_receive_trans.get_data (siid)) {
+
+        SCIM_DEBUG_FRONTEND (3) << "  SI (" << siid << ").\n";
+
+        m_current_instance = (int) siid;
+
+        focus_out ((int) siid); 
+        m_send_trans.put_command (SCIM_TRANS_CMD_OK);
+
+        m_current_instance = -1;
+    }
+}
+
+void
+IBusFrontEnd::ibus_trigger_property (int /*client_id*/)
+{
+    uint32 siid;
+    String property;
+
+    SCIM_DEBUG_FRONTEND (2) << " ibus_trigger_property.\n";
+
+    if (m_receive_trans.get_data (siid) &&
+        m_receive_trans.get_data (property)) {
+
+        SCIM_DEBUG_FRONTEND (3) << "  SI (" << siid << ").\n";
+
+        m_current_instance = (int) siid;
+
+        trigger_property ((int) siid, property); 
+        m_send_trans.put_command (SCIM_TRANS_CMD_OK);
+
+        m_current_instance = -1;
+    }
+}
+
+void
+IBusFrontEnd::ibus_process_helper_event (int /*client_id*/)
+{
+    uint32 siid;
+    String helper_uuid;
+    Transaction trans;
+
+    SCIM_DEBUG_FRONTEND (2) << " ibus_process_helper_event.\n";
+
+    if (m_receive_trans.get_data (siid) &&
+        m_receive_trans.get_data (helper_uuid) &&
+        m_receive_trans.get_data (trans)) {
+
+        SCIM_DEBUG_FRONTEND (3) << "  SI (" << siid << ").\n";
+
+        m_current_instance = (int) siid;
+
+        process_helper_event ((int) siid, helper_uuid, trans); 
+        m_send_trans.put_command (SCIM_TRANS_CMD_OK);
+
+        m_current_instance = -1;
+    }
+}
+
+void
+IBusFrontEnd::ibus_update_client_capabilities (int /*client_id*/)
+{
+    uint32 siid;
+    uint32 cap;
+
+    SCIM_DEBUG_FRONTEND (2) << " ibus_update_client_capabilities.\n";
+
+    if (m_receive_trans.get_data (siid) && m_receive_trans.get_data (cap)) {
+
+        SCIM_DEBUG_FRONTEND (3) << "  SI (" << siid << ").\n";
+
+        m_current_instance = (int) siid;
+
+        update_client_capabilities ((int) siid, cap); 
+
+        m_send_trans.put_command (SCIM_TRANS_CMD_OK);
+
+        m_current_instance = -1;
+    }
+}
+
+
+void
+IBusFrontEnd::ibus_flush_config (int /*client_id*/)
+{
+    if (m_config_readonly || m_config.null ())
         return;
 
-    feedback = new XIMFeedback [str.length () + 1];
+    SCIM_DEBUG_FRONTEND (2) << " ibus_flush_config.\n";
 
-    for (i = 0; i < len; ++i)
-        feedback [i] = 0;
-
-    for (i = 0; i < attrs.size (); ++i) {
-        attr = 0;
-        if (attrs [i].get_type () == SCIM_ATTR_DECORATE) {
-            if (attrs [i].get_value () == SCIM_ATTR_DECORATE_REVERSE)
-                attr = XIMReverse;
-            else if (attrs [i].get_value () == SCIM_ATTR_DECORATE_HIGHLIGHT)
-                attr = XIMHighlight;
-        }
-        for (j = attrs [i].get_start (); j < attrs [i].get_end () && j < len; ++j)
-            feedback [j] |= attr;
-    }
-
-    for (i = 0; i < len; ++i)
-        if (!feedback [i])
-            feedback [i] = XIMUnderline;
-
-    feedback [len] = 0;
-
-    pcb.major_code = XIM_PREEDIT_DRAW;
-    pcb.connect_id = ic->connect_id;
-    pcb.icid = ic->icid;
-
-    pcb.todo.draw.caret = len;
-    pcb.todo.draw.chg_first = 0;
-    pcb.todo.draw.chg_length = ic->onspot_preedit_length;
-    pcb.todo.draw.text = &text;
-
-    text.feedback = feedback;
-
-    if (len > 0 && ims_wcstocts (tp, ic, str)) {
-        text.encoding_is_wchar = false;
-        text.length = strlen ((char*)tp.value);
-        text.string.multi_byte = (char*)tp.value;
-        IMCallCallback (m_xims, (XPointer) & pcb);
-        XFree (tp.value);
-    } else {
-        text.encoding_is_wchar = false;
-        text.length = 0;
-        text.string.multi_byte = const_cast<char*> ("");
-        IMCallCallback (m_xims, (XPointer) & pcb);
-        len = 0;
-    }
-
-    ic->onspot_preedit_length = len;
-
-    delete [] feedback;
+    if (m_config->flush ())
+        m_send_trans.put_command (SCIM_TRANS_CMD_OK);
 }
 
 void
-IBusFrontEnd::ims_preedit_callback_caret (X11IC *ic, int caret)
+IBusFrontEnd::ibus_erase_config (int /*client_id*/)
 {
-    if (!validate_ic (ic) || !ic->onspot_preedit_started || caret > ic->onspot_preedit_length || caret < 0)
+    if (m_config_readonly || m_config.null ())
         return;
 
-    SCIM_DEBUG_FRONTEND(2) << " Onspot preedit caret, ICID="
-            << ic->icid << " Connect ID=" << ic->connect_id << "\n";
+    String key;
 
-    //save the caret position for future usage when updating preedit string.
-    ic->onspot_caret = caret;
+    SCIM_DEBUG_FRONTEND (2) << " ibus_erase_config.\n";
 
-    //client usually does not support this callback
-    IMPreeditCBStruct pcb;
+    if (m_receive_trans.get_data (key)) {
 
-    pcb.major_code = XIM_PREEDIT_CARET;
-    pcb.connect_id = ic->connect_id;
-    pcb.icid       = ic->icid;
-    pcb.todo.caret.direction = XIMAbsolutePosition;
-    pcb.todo.caret.position = caret;
-    pcb.todo.caret.style = XIMIsPrimary;
-    IMCallCallback (m_xims, (XPointer) & pcb);
+        SCIM_DEBUG_FRONTEND (3) << "  Key   (" << key << ").\n";
+
+        if (m_config->erase (key))
+            m_send_trans.put_command (SCIM_TRANS_CMD_OK);
+    }
 }
 
 void
-IBusFrontEnd::ims_preedit_callback_caret (IBusInputContext *ic, int caret)
+IBusFrontEnd::ibus_reload_config (int /*client_id*/)
 {
-    log_func_incomplete();
+    static timeval last_timestamp = {0, 0};
 
-    if (!validate_ic (ic) || !ic->is_onspot_preedit_started() || caret > ic->get_onspot_preedit_length() || caret < 0)
+    if (m_config.null ())
         return;
 
-    SCIM_DEBUG_FRONTEND(2) << " Onspot preedit caret, ICID="
-            << ic->get_id() << "\n";
+    SCIM_DEBUG_FRONTEND (2) << " ibus_reload_config.\n";
 
-    //save the caret position for future usage when updating preedit string.
-    ic->set_onspot_caret(caret);
+    timeval timestamp;
 
-//    //client usually does not support this callback
-//    IMPreeditCBStruct pcb;
-//
-//    pcb.major_code = XIM_PREEDIT_CARET;
-//    pcb.connect_id = ic->connect_id;
-//    pcb.icid       = ic->icid;
-//    pcb.todo.caret.direction = XIMAbsolutePosition;
-//    pcb.todo.caret.position = caret;
-//    pcb.todo.caret.style = XIMIsPrimary;
-//    IMCallCallback (m_xims, (XPointer) & pcb);
-}
+    gettimeofday (&timestamp, 0);
 
-bool
-IBusFrontEnd::ims_string_conversion_callback_retrieval (X11IC *ic, WideString &text, int &cursor, int maxlen_before, int maxlen_after)
-{
-#if 0
-    if (!validate_ic (ic) || (maxlen_before == 0 && maxlen_after == 0))
-        return false;
+    if (timestamp.tv_sec > last_timestamp.tv_sec + 1)
+        m_config->reload ();
 
-    SCIM_DEBUG_FRONTEND(2) << " String conversion callback retrieval, ICID="
-            << ic->icid << " Connect ID=" << ic->connect_id << "\n";
+    gettimeofday (&last_timestamp, 0);
 
-    //client usually does not support this callback
-    IMStrConvCBStruct sccb;
-
-    sccb.major_code        = XIM_STR_CONVERSION;
-    sccb.connect_id        = ic->connect_id;
-    sccb.icid              = ic->icid;
-    sccb.strconv.text      = 0;
-
-    sccb.strconv.operation = XIMStringConversionRetrieval;
-    sccb.strconv.position  = 0;
-
-    sccb.strconv.direction = XIMBackwardChar;
-    sccb.strconv.factor    = (short)((maxlen_before > 0) ? maxlen_before : 1);
-
-    IMCallCallback (m_xims, (XPointer) & sccb);
-
-    std::cerr << "Surrounding text: ";
-
-    if (sccb.strconv.text && sccb.strconv.text->string.mbs) {
-        std::cerr << sccb.strconv.text->string.mbs << " ";
-    }
-
-    sccb.strconv.direction = XIMForwardChar;
-    sccb.strconv.factor    = (maxlen_after > 0) ? maxlen_after : 1;
-
-    IMCallCallback (m_xims, (XPointer) & sccb);
-
-    if (sccb.strconv.text && sccb.strconv.text->string.mbs) {
-        std::cerr << sccb.strconv.text->string.mbs;
-    }
-
-    std::cerr << "\n";
-#endif
-    return false;
-}
-
-bool
-IBusFrontEnd::ims_string_conversion_callback_substitution (X11IC *ic, int offset, int len)
-{
-#if 0
-    if (!validate_ic (ic) || len <= 0)
-        return false;
-
-    SCIM_DEBUG_FRONTEND(2) << " String conversion callback substitution, ICID="
-            << ic->icid << " Connect ID=" << ic->connect_id << "\n";
-
-    //client usually does not support this callback
-    IMStrConvCBStruct sccb;
-
-    sccb.major_code        = XIM_STR_CONVERSION;
-    sccb.connect_id        = ic->connect_id;
-    sccb.icid              = ic->icid;
-    sccb.strconv.text      = 0;
-    sccb.strconv.operation = XIMStringConversionSubstitution;
-    sccb.strconv.position  = (XIMStringConversionPosition) offset;
-    sccb.strconv.direction = XIMForwardChar;
-    sccb.strconv.factor    = (short) len;
-
-    IMCallCallback (m_xims, (XPointer) & sccb);
-
-    return sccb.strconv.text != NULL;
-#endif
-    return false;
+    m_send_trans.put_command (SCIM_TRANS_CMD_OK);
 }
 
 void
-IBusFrontEnd::ims_turn_on_ic (X11IC *ic)
+IBusFrontEnd::ibus_get_config_string (int /*client_id*/)
 {
-    if (validate_ic (ic) && !ic->xims_on) {
-        SCIM_DEBUG_FRONTEND(2) << "ims_turn_on_ic.\n";
+    if (m_config.null ()) return;
 
-        ic->xims_on = true;
+    String key;
 
-        //Record the IC on/off status
-        if (m_shared_input_method)
-            m_config->write (String (SCIM_CONFIG_FRONTEND_IM_OPENED_BY_DEFAULT), true);
+    SCIM_DEBUG_FRONTEND (2) << " ibus_get_config_string.\n";
 
-        if (is_focused_ic (ic)) {
-            panel_req_focus_in (ic);
-            start_ic (ic);
+    if (m_receive_trans.get_data (key)) {
+        String value;
+
+        SCIM_DEBUG_FRONTEND (3) << "  Key (" << key << ").\n";
+
+        if (m_config->read (key, &value)) {
+            m_send_trans.put_data (value);
+            m_send_trans.put_command (SCIM_TRANS_CMD_OK);
         }
     }
 }
 
 void
-IBusFrontEnd::ims_turn_on_ic (IBusInputContext *ic)
+IBusFrontEnd::ibus_set_config_string (int /*client_id*/)
 {
-    log_func();
-
-    if (validate_ic (ic) && !ic->is_on()) {
-        SCIM_DEBUG_FRONTEND(2) << "ims_turn_on_ic.\n";
-
-        ic->set_on(true);
-
-        //Record the IC on/off status
-        if (m_shared_input_method)
-            m_config->write (String (SCIM_CONFIG_FRONTEND_IM_OPENED_BY_DEFAULT), true);
-
-        if (is_focused_ic (ic)) {
-            panel_req_focus_in (ic);
-            start_ic (ic);
-        }
-    }
-}
-
-void
-IBusFrontEnd::ims_turn_off_ic (X11IC *ic)
-{
-    if (validate_ic (ic) && ic->xims_on) {
-        SCIM_DEBUG_FRONTEND(2) << "ims_turn_off_ic.\n";
-
-        ic->xims_on = false;
-
-        //Record the IC on/off status
-        if (m_shared_input_method)
-            m_config->write (String (SCIM_CONFIG_FRONTEND_IM_OPENED_BY_DEFAULT), false);
-
-        if (is_focused_ic (ic))
-            stop_ic (ic);
-    }
-}
-
-void
-IBusFrontEnd::ims_turn_off_ic (IBusInputContext *ic)
-{
-    log_func();
-
-    if (validate_ic (ic) && ic->is_on()) {
-        SCIM_DEBUG_FRONTEND(2) << "ims_turn_off_ic.\n";
-
-        ic->set_on(false);
-
-        //Record the IC on/off status
-        if (m_shared_input_method)
-            m_config->write (String (SCIM_CONFIG_FRONTEND_IM_OPENED_BY_DEFAULT), false);
-
-        if (is_focused_ic (ic))
-            stop_ic (ic);
-    }
-}
-
-void
-IBusFrontEnd::ims_sync_ic (X11IC *ic)
-{
-    if (validate_ic (ic)) {
-        IMSyncXlibStruct data;
-
-        data.major_code = XIM_SYNC;
-        data.minor_code = 0;
-        data.connect_id = ic->connect_id;
-        data.icid       = ic->icid;
-
-        IMSyncXlib(m_xims, (XPointer) &data);
-    }
-}
-
-void
-IBusFrontEnd::set_ic_capabilities (const X11IC *ic)
-{
-    if (validate_ic (ic)) {
-        unsigned int cap = SCIM_CLIENT_CAP_ALL_CAPABILITIES - SCIM_CLIENT_CAP_SURROUNDING_TEXT;
-
-        if (!ims_is_preedit_callback_mode (ic))
-            cap -= SCIM_CLIENT_CAP_ONTHESPOT_PREEDIT;
-
-        update_client_capabilities (ic->siid, cap);
-    }
-}
-
-void
-IBusFrontEnd::input_context_capability_updated (IBusInputContext *ic)
-{
-    log_func();
-
-    if (validate_ic (ic)) {
-        unsigned int cap = SCIM_CLIENT_CAP_ALL_CAPABILITIES - SCIM_CLIENT_CAP_SURROUNDING_TEXT;
-
-        if (ic->is_client_commit_preedit())
-            cap -= SCIM_CLIENT_CAP_ONTHESPOT_PREEDIT;
-
-        update_client_capabilities (ic->get_siid(), cap);
-    }
-}
-
-void
-IBusFrontEnd::input_context_focus_in (IBusInputContext *ic)
-{
-    log_func();
-
-    SCIM_DEBUG_FRONTEND(2) << " IMS Set IC focus handler, ID="
-                    << ic->get_id() << "\n";
-    
-//    X11IC *ic =m_ic_manager.find_ic (call_data->icid);
-//
-    if (find_ic(ic->get_id()) == NULL) {
-        SCIM_DEBUG_FRONTEND(1) << "Cannot find IC for icid " << ic->get_id() << "\n";
+    if (m_config_readonly || m_config.null ())
         return;
+
+    String key;
+    String value;
+
+    SCIM_DEBUG_FRONTEND (2) << " ibus_set_config_string.\n";
+
+    if (m_receive_trans.get_data (key) &&
+        m_receive_trans.get_data (value)) {
+
+        SCIM_DEBUG_FRONTEND (3) << "  Key   (" << key << ").\n";
+        SCIM_DEBUG_FRONTEND (3) << "  Value (" << value << ").\n";
+
+        if (m_config->write (key, value))
+            m_send_trans.put_command (SCIM_TRANS_CMD_OK);
     }
-//    if (!validate_ic (ic)) {
-//        SCIM_DEBUG_FRONTEND(1) << "Cannot find IC for icid " << call_data->icid << "\n";
-//        return 0;
-//    }
-
-    if (validate_ic (m_focused_ic) && m_focused_ic->get_id() != ic->get_id()) {
-        m_panel_client.prepare (m_focused_ic->get_id());
-        stop_ic (m_focused_ic);
-        m_panel_client.focus_out (m_focused_ic->get_id());
-        m_panel_client.send ();
-    }
-
-    String encoding = scim_get_locale_encoding (ic->get_locale());
-    String language = scim_get_locale_language (ic->get_locale());
-    bool need_reg = false;
-    bool need_cap = false;
-    bool need_reset = false;
-
-    m_focused_ic = ic;
-
-    m_panel_client.prepare (ic->get_id());
-
-    if (m_shared_input_method) {
-        SCIM_DEBUG_FRONTEND(3) << "Shared input method.\n";
-
-        if (!ic->is_shared_siid()) {
-            delete_instance (ic->get_siid());
-            ic->set_shared_siid(true);
-        }
-
-        ic->set_siid(get_default_instance (language, encoding));
-        ic->set_onspot_preedit_started(false);
-        ic->set_onspot_preedit_length(0);
-        ic->set_onspot_caret(0);
-
-        ic->set_on(m_config->read (String (SCIM_CONFIG_FRONTEND_IM_OPENED_BY_DEFAULT), ic->is_on()));
-
-        need_reg = true;
-        need_cap = true;
-        need_reset = true;
-    } else if (ic->is_shared_siid()) {
-        String sfid = get_default_factory (language, encoding);
-        ic->set_siid(new_instance (sfid, encoding));
-        ic->set_onspot_preedit_started(false);
-        ic->set_onspot_preedit_length(0);
-        ic->set_onspot_caret(0);
-        ic->set_shared_siid(false);
-        need_reg = true;
-        need_cap = true;
-    }
-
-    panel_req_focus_in (ic);
-
-    if (need_reset) reset (ic->get_siid());
-    if (need_cap) input_context_capability_updated (ic);
-    if (need_reg) m_panel_client.register_input_context (ic->get_id(), get_instance_uuid (ic->get_siid()));
-
-    if (ic->is_on()) {
-        start_ic (ic);
-    } else {
-    	panel_req_update_factory_info (ic);
-        m_panel_client.turn_off (ic->get_id());
-    }
-
-    m_panel_client.send ();
 }
 
 void
-IBusFrontEnd::input_context_focus_out (IBusInputContext *ic)
+IBusFrontEnd::ibus_get_config_int (int /*client_id*/)
 {
-    log_func_not_impl();
+    if (m_config.null ()) return;
 
-    if (!validate_ic (ic)) {
-        SCIM_DEBUG_FRONTEND(1) << "Cannot find IC for icid " << ic->get_id() << "\n";
+    String key;
+
+    SCIM_DEBUG_FRONTEND (2) << " ibus_get_config_int.\n";
+
+    if (m_receive_trans.get_data (key)) {
+
+        SCIM_DEBUG_FRONTEND (3) << "  Key (" << key << ").\n";
+
+        int value;
+        if (m_config->read (key, &value)) {
+            m_send_trans.put_data ((uint32) value);
+            m_send_trans.put_command (SCIM_TRANS_CMD_OK);
+        }
+    }
+}
+
+void
+IBusFrontEnd::ibus_set_config_int (int /*client_id*/)
+{
+    if (m_config_readonly || m_config.null ())
         return;
+
+    String key;
+    uint32 value;
+
+    SCIM_DEBUG_FRONTEND (2) << " ibus_set_config_int.\n";
+
+    if (m_receive_trans.get_data (key) &&
+        m_receive_trans.get_data (value)) {
+
+        SCIM_DEBUG_FRONTEND (3) << "  Key   (" << key << ").\n";
+        SCIM_DEBUG_FRONTEND (3) << "  Value (" << value << ").\n";
+
+        if (m_config->write (key, (int) value))
+            m_send_trans.put_command (SCIM_TRANS_CMD_OK);
     }
 }
 
 void
-IBusFrontEnd::input_context_reset (IBusInputContext *ic)
+IBusFrontEnd::ibus_get_config_bool (int /*client_id*/)
 {
-    log_func_not_impl();
+    if (m_config.null ()) return;
 
-    if (!validate_ic (ic)) {
-        SCIM_DEBUG_FRONTEND(1) << "Cannot find IC for icid " << ic->get_id() << "\n";
+    String key;
+
+    SCIM_DEBUG_FRONTEND (2) << " ibus_get_config_bool.\n";
+
+    if (m_receive_trans.get_data (key)) {
+        bool value;
+
+        SCIM_DEBUG_FRONTEND (3) << "  Key (" << key << ").\n";
+
+        if (m_config->read (key, &value)) {
+            m_send_trans.put_data ((uint32) value);
+            m_send_trans.put_command (SCIM_TRANS_CMD_OK);
+        }
+    }
+}
+
+void
+IBusFrontEnd::ibus_set_config_bool (int /*client_id*/)
+{
+    if (m_config_readonly || m_config.null ())
         return;
+
+    String key;
+    uint32 value;
+
+    SCIM_DEBUG_FRONTEND (2) << " ibus_set_config_bool.\n";
+
+    if (m_receive_trans.get_data (key) &&
+        m_receive_trans.get_data (value)) {
+
+        SCIM_DEBUG_FRONTEND (3) << "  Key   (" << key << ").\n";
+        SCIM_DEBUG_FRONTEND (3) << "  Value (" << value << ").\n";
+
+        if (m_config->write (key, (bool) value))
+            m_send_trans.put_command (SCIM_TRANS_CMD_OK);
     }
 }
 
 void
-IBusFrontEnd::input_context_cursor_location_updated(IBusInputContext *ic)
+IBusFrontEnd::ibus_get_config_double (int /*client_id*/)
 {
-    log_func_not_impl();
+    if (m_config.null ()) return;
 
-    if (!validate_ic (ic)) {
-        SCIM_DEBUG_FRONTEND(1) << "Cannot find IC for icid " << ic->get_id() << "\n";
+    String key;
+
+    SCIM_DEBUG_FRONTEND (2) << " ibus_get_config_double.\n";
+
+    if (m_receive_trans.get_data (key)) {
+        double value;
+
+        SCIM_DEBUG_FRONTEND (3) << "  Key (" << key << ").\n";
+
+        if (m_config->read (key, &value)) {
+            char buf [80];
+            snprintf (buf, 79, "%lE", value);
+            m_send_trans.put_data (String (buf));
+            m_send_trans.put_command (SCIM_TRANS_CMD_OK);
+        }
+    }
+}
+
+void
+IBusFrontEnd::ibus_set_config_double (int /*client_id*/)
+{
+    if (m_config_readonly || m_config.null ())
         return;
-    }
-}
 
-bool
-IBusFrontEnd::input_context_process_key_event(IBusInputContext *ic,
-                                              uint32_t keyval,
-                                              uint32_t keycode,
-                                              uint32_t state)
-{
-    log_func();
+    String key;
+    String str;
 
-    SCIM_DEBUG_FRONTEND(2) << " IBus Forward event handler, ICID="
-                    << ic->get_id() << " Key Value="
-                    << keyval << " Key Code="
-                    << keycode << "Modifiers="
-                    << state << "\n";
-    
-    if (!validate_ic (ic)) {
-        SCIM_DEBUG_FRONTEND(1) << "Cannot find IC for icid " << ic->get_id() << "\n";
-        return 0;
-    }
+    SCIM_DEBUG_FRONTEND (2) << " ibus_set_config_double.\n";
 
-    // If the ic is not focused, then return.
-    if (!is_focused_ic (ic)) {
-        SCIM_DEBUG_FRONTEND(1) << "IC " << ic->get_id() << " is not focused, focus it first.\n";
-        return 0;
-    }
+    if (m_receive_trans.get_data (key) &&
+        m_receive_trans.get_data (str)) {
+        double value;
+        sscanf (str.c_str (), "%lE", &value);
 
-//    XKeyEvent *event = (XKeyEvent*) &(call_data->event);
-    KeyEvent scimkey = scim_ibus_keyevent_to_scim (keyval, keycode, state);
-//    KeyEvent scimkey = scim_x11_keyevent_x11_to_scim (m_display, *event);
+        SCIM_DEBUG_FRONTEND (3) << "  Key   (" << key << ").\n";
+        SCIM_DEBUG_FRONTEND (3) << "  Value (" << value << ").\n";
 
-    scimkey.mask  &= m_valid_key_mask;
-
-    // Set keyboard layout information.
-    scimkey.layout = m_keyboard_layout;
-
-    String scimkeystr;
-    scim_key_to_string(scimkeystr, scimkey);
-    log_debug("KeyEvent: %s", scimkeystr.c_str());
-    SCIM_DEBUG_FRONTEND(3)  << "  KeyEvent:" << scimkeystr << "\n";
-
-    m_panel_client.prepare (ic->get_id());
-
-    bool processed = false;
-    if (filter_hotkeys (ic, scimkey)) {
-        log_info("hot key processed");
-        processed = true;
-    }
-    else if (ic->is_on() && process_key_event (ic->get_siid(), scimkey)) {
-        log_info("key processed");
-        processed = true;
-    }
-    else if (m_fallback_instance->process_key_event (scimkey)) {
-        log_info("key processed by fallback instance");
-        processed = true;
-    }
-    else {
-        if (ic->notify_forward_key_event(keyval, keycode, state) < 0) {
-            log_info("failed to forward key event: %s", strerror(errno));
-        }
-        //IMForwardEvent (ims, (XPointer) call_data);
-    }
-
-    m_panel_client.send ();
-
-    log_debug("key processed=%s", processed ? "true" : "false");
-
-    return processed;
-}
-
-void
-IBusFrontEnd::start_ic (X11IC *ic)
-{
-    if (validate_ic (ic)) {
-        if (m_xims_dynamic) {
-            IMPreeditStateStruct ips;
-            ips.major_code = 0;
-            ips.minor_code = 0;
-            ips.icid = ic->icid;
-            ips.connect_id = ic->connect_id;
-            IMPreeditStart (m_xims, (XPointer) & ips);
-        }
-
-        panel_req_update_screen (ic);
-        panel_req_update_spot_location (ic);
-        panel_req_update_factory_info (ic);
-
-        m_panel_client.turn_on (ic->icid);
-        m_panel_client.hide_preedit_string (ic->icid);
-        m_panel_client.hide_aux_string (ic->icid);
-        m_panel_client.hide_lookup_table (ic->icid);
-
-        if (ic->shared_siid) reset (ic->siid);
-
-        focus_in (ic->siid);
+        if (m_config->write (key, value))
+            m_send_trans.put_command (SCIM_TRANS_CMD_OK);
     }
 }
 
 void
-IBusFrontEnd::start_ic (IBusInputContext *ic)
+IBusFrontEnd::ibus_get_config_vector_string (int /*client_id*/)
 {
-    log_func();
+    if (m_config.null ()) return;
 
-    if (validate_ic (ic)) {
-        if (ic->notify_show_preedit_text() < 0) {
-            log_info("failed to notify show preedit text: %s", strerror(errno));
-        }
-//      if (m_xims_dynamic) {
-//          IMPreeditStateStruct ips;
-//          ips.major_code = 0;
-//          ips.minor_code = 0;
-//          ips.icid = ic->icid;
-//          ips.connect_id = ic->connect_id;
-//          IMPreeditStart (m_xims, (XPointer) & ips);
-//      }
+    String key;
 
-        panel_req_update_screen (ic);
-        panel_req_update_spot_location (ic);
-        panel_req_update_factory_info (ic);
+    SCIM_DEBUG_FRONTEND (2) << " ibus_get_config_vector_string.\n";
 
-        m_panel_client.turn_on (ic->get_id());
-        m_panel_client.hide_preedit_string (ic->get_id());
-        m_panel_client.hide_aux_string (ic->get_id());
-        m_panel_client.hide_lookup_table (ic->get_id());
+    if (m_receive_trans.get_data (key)) {
+        std::vector <String> vec;
 
-        if (ic->is_shared_siid()) reset (ic->get_siid());
+        SCIM_DEBUG_FRONTEND (3) << "  Key (" << key << ").\n";
 
-        focus_in (ic->get_siid());
-    }
-}
-
-void
-IBusFrontEnd::stop_ic (X11IC *ic)
-{
-    if (validate_ic (ic)) {
-        focus_out (ic->siid);
-        if (ic->shared_siid) reset (ic->siid);
-
-        if (ims_is_preedit_callback_mode (ic))
-            ims_preedit_callback_done (ic);
-
-        panel_req_update_factory_info (ic);
-        m_panel_client.turn_off (ic->icid);
-
-        if (m_xims_dynamic) {
-            IMPreeditStateStruct ips;
-            ips.major_code = 0;
-            ips.minor_code = 0;
-            ips.icid = ic->icid;
-            ips.connect_id = ic->connect_id;
-            IMPreeditEnd (m_xims, (XPointer) & ips);
+        if (m_config->read (key, &vec)) {
+            m_send_trans.put_data (vec);
+            m_send_trans.put_command (SCIM_TRANS_CMD_OK);
         }
     }
 }
 
 void
-IBusFrontEnd::stop_ic (IBusInputContext *ic)
+IBusFrontEnd::ibus_set_config_vector_string (int /*client_id*/)
 {
-    log_func();
-
-    if (validate_ic (ic)) {
-        focus_out (ic->get_siid());
-        if (ic->is_shared_siid()) reset (ic->get_siid());
-
-        if (ims_is_preedit_callback_mode (ic))
-            ims_preedit_callback_done (ic);
-
-        panel_req_update_factory_info (ic);
-        m_panel_client.turn_off (ic->get_id());
-
-        //if (m_xims_dynamic) {
-        //    IMPreeditStateStruct ips;
-        //    ips.major_code = 0;
-        //    ips.minor_code = 0;
-        //    ips.icid = ic->icid;
-        //    ips.connect_id = ic->connect_id;
-        //    IMPreeditEnd (m_xims, (XPointer) & ips);
-        //}
-        if (ic->notify_hide_preedit_text() < 0) {
-            log_info("failed to notify hide preedit text: %s", strerror(errno));
-        }
-    }
-}
-
-int
-IBusFrontEnd::ims_protocol_handler (XIMS ims, IMProtocol *call_data)
-{
-    if (!_scim_frontend || !call_data || ims != _scim_frontend->m_xims)
-        return 0;
-
-    switch (call_data->major_code) {
-        case XIM_OPEN:
-            return _scim_frontend->ims_open_handler (ims, (IMOpenStruct *) call_data);
-        case XIM_CLOSE:
-            return _scim_frontend->ims_close_handler (ims, (IMCloseStruct *) call_data);
-        case XIM_CREATE_IC:
-            return _scim_frontend->ims_create_ic_handler (ims, (IMChangeICStruct *) call_data);
-        case XIM_DESTROY_IC:
-            return _scim_frontend->ims_destroy_ic_handler (ims, (IMDestroyICStruct *) call_data);
-        case XIM_SET_IC_VALUES:
-            return _scim_frontend->ims_set_ic_values_handler (ims, (IMChangeICStruct *) call_data);
-        case XIM_GET_IC_VALUES:
-            return _scim_frontend->ims_get_ic_values_handler (ims, (IMChangeICStruct *) call_data);
-        case XIM_FORWARD_EVENT:
-            return _scim_frontend->ims_forward_event_handler (ims, (IMForwardEventStruct *) call_data);
-        case XIM_SET_IC_FOCUS:
-            return _scim_frontend->ims_set_ic_focus_handler (ims, (IMChangeFocusStruct *) call_data);
-        case XIM_UNSET_IC_FOCUS:
-            return _scim_frontend->ims_unset_ic_focus_handler (ims, (IMChangeFocusStruct *) call_data);
-        case XIM_RESET_IC:
-            return _scim_frontend->ims_reset_ic_handler (ims, (IMResetICStruct *) call_data);
-        case XIM_TRIGGER_NOTIFY:
-            return _scim_frontend->ims_trigger_notify_handler (ims, (IMTriggerNotifyStruct *) call_data);
-        case XIM_PREEDIT_START_REPLY:
-            return _scim_frontend->ims_preedit_start_reply_handler (ims, (IMPreeditCBStruct *) call_data);
-        case XIM_PREEDIT_CARET_REPLY:
-            return _scim_frontend->ims_preedit_caret_reply_handler (ims, (IMPreeditCBStruct *) call_data);
-        case XIM_SYNC_REPLY:
-            return _scim_frontend->ims_sync_reply_handler (ims, (IMSyncXlibStruct *) call_data);
-        default:
-            SCIM_DEBUG_FRONTEND(1) << "Unknown major code " << call_data->major_code << "\n";
-            break;
-    }
-    return 1;
-}
-
-int
-IBusFrontEnd::x_error_handler (Display *display, XErrorEvent *error)
-{
-#if ENABLE_DEBUG
-    char buf [256];
-
-    XGetErrorText (display, error->error_code, buf, 256);
-
-    SCIM_DEBUG_FRONTEND (1)
-            << "X Error occurred:\n"
-            << "  Display     = " << display << "\n"
-            << "  Type        = " << error->type << "\n"
-            << "  Resourceid  = " << error->resourceid << "\n"
-            << "  Serial      = " << error->serial << "\n"
-            << "  ErrorCode   = " << (uint32) error->error_code << "\n"
-            << "  RequestCode = " << (uint32) error->request_code << "\n"
-            << "  MinorCode   = " << (uint32) error->minor_code << "\n"
-            << "  Error Text  = " << buf << "\n";
-#endif
-
-    // trap all possible error for broken focus ic.
-    if ((error->error_code == BadWindow ||
-         error->error_code == BadMatch) &&
-        (error->request_code == X_GetWindowAttributes ||
-         error->request_code == X_GetProperty ||
-         error->request_code == X_SendEvent ||
-         error->request_code == X_TranslateCoords)) {
-        SCIM_DEBUG_FRONTEND(1) << "Discard This Error\n";
-    } else if (_scim_frontend && _scim_frontend->m_old_x_error_handler) {
-        _scim_frontend->m_old_x_error_handler (display, error);
-    }
-
-    return 0;
-}
-
-
-//===================== Panel Slot callbacks =======================
-void
-IBusFrontEnd::panel_slot_reload_config (int context)
-{
-    log_func();
-
-    m_config->reload ();
-}
-void
-IBusFrontEnd::panel_slot_exit (int context)
-{
-    log_func();
-
-    sd_event_exit(m_loop, 0);
-}
-void
-IBusFrontEnd::panel_slot_update_lookup_table_page_size (int context, int page_size)
-{
-    log_func();
-
-    X11IC *ic = m_ic_manager.find_ic (context);
-    if (validate_ic (ic)) {
-        m_panel_client.prepare (ic->icid);
-        update_lookup_table_page_size (ic->siid, page_size);
-        m_panel_client.send ();
-    }
-}
-void
-IBusFrontEnd::panel_slot_lookup_table_page_up (int context)
-{
-    log_func();
-
-    X11IC *ic = m_ic_manager.find_ic (context);
-    if (validate_ic (ic)) {
-        m_panel_client.prepare (ic->icid);
-        lookup_table_page_up (ic->siid);
-        m_panel_client.send ();
-    }
-}
-void
-IBusFrontEnd::panel_slot_lookup_table_page_down (int context)
-{
-    log_func();
-
-    X11IC *ic = m_ic_manager.find_ic (context);
-    if (validate_ic (ic)) {
-        m_panel_client.prepare (ic->icid);
-        lookup_table_page_down (ic->siid);
-        m_panel_client.send ();
-    }
-}
-void
-IBusFrontEnd::panel_slot_trigger_property (int context, const String &property)
-{
-    log_func();
-
-    X11IC *ic = m_ic_manager.find_ic (context);
-    if (validate_ic (ic)) {
-        m_panel_client.prepare (ic->icid);
-        trigger_property (ic->siid, property);
-        m_panel_client.send ();
-    }
-}
-void
-IBusFrontEnd::panel_slot_process_helper_event (int context, const String &target_uuid, const String &helper_uuid, const Transaction &trans)
-{
-    log_func();
-
-    X11IC *ic = m_ic_manager.find_ic (context);
-    if (validate_ic (ic) && get_instance_uuid (ic->siid) == target_uuid) {
-        m_panel_client.prepare (ic->icid);
-        process_helper_event (ic->siid, helper_uuid, trans);
-        m_panel_client.send ();
-    }
-}
-void
-IBusFrontEnd::panel_slot_move_preedit_caret (int context, int caret_pos)
-{
-    log_func();
-
-    X11IC *ic = m_ic_manager.find_ic (context);
-    if (validate_ic (ic)) {
-        m_panel_client.prepare (ic->icid);
-        move_preedit_caret (ic->siid, caret_pos);
-        m_panel_client.send ();
-    }
-}
-void
-IBusFrontEnd::panel_slot_select_candidate (int context, int cand_index)
-{
-    log_func();
-
-    X11IC *ic = m_ic_manager.find_ic (context);
-    if (validate_ic (ic)) {
-        m_panel_client.prepare (ic->icid);
-        select_candidate (ic->siid, cand_index);
-        m_panel_client.send ();
-    }
-}
-//void
-//IBusFrontEnd::panel_slot_process_key_event (int context, const KeyEvent &key)
-//{
-//    log_func();
-//
-//    X11IC *ic = m_ic_manager.find_ic (context);
-//    if (validate_ic (ic)) {
-//        m_panel_client.prepare (ic->icid);
-//
-//        if (!filter_hotkeys (ic, key)) {
-//            if (!ic->xims_on || !process_key_event (ic->siid, key)) {
-//                if (!m_fallback_instance->process_key_event (key))
-//                    ims_forward_key_event (ic, key);
-//            }
-//        }
-//
-//        m_panel_client.send ();
-//    }
-//}
-void
-IBusFrontEnd::panel_slot_process_key_event (int context, const KeyEvent &key)
-{
-    log_func();
-
-    IBusInputContext *ic = find_ic (context);
-    if (!validate_ic (ic)) {
+    if (m_config_readonly || m_config.null ())
         return;
+
+    String key;
+    std::vector<String> vec;
+
+    SCIM_DEBUG_FRONTEND (2) << " ibus_set_config_vector_string.\n";
+
+    if (m_receive_trans.get_data (key) &&
+        m_receive_trans.get_data (vec)) {
+
+        SCIM_DEBUG_FRONTEND (3) << "  Key (" << key << ").\n";
+
+        if (m_config->write (key, vec))
+            m_send_trans.put_command (SCIM_TRANS_CMD_OK);
     }
+}
 
-    m_panel_client.prepare (ic->get_id());
+void
+IBusFrontEnd::ibus_get_config_vector_int (int /*client_id*/)
+{
+    if (m_config.null ()) return;
 
-    if (!filter_hotkeys (ic, key)) {
-        if (!ic->is_on() || !process_key_event (ic->get_siid(), key)) {
-            if (!m_fallback_instance->process_key_event (key)) {
-                if (log_level_enabled(LOG_LEVEL_DEBUG)) {
-                    String keystr;
-                    KeyEvent tmp = key;
-                    scim_key_to_string(keystr, tmp);
-                    log_debug("forward key event: %s", keystr.c_str());
-                }
-                if (ic->notify_forward_key_event(0, key.code, key.mask) < 0) {
-                    log_info("failed to notify forward key event: %s", strerror(errno));
-                }
-//              ims_forward_key_event (ic, key);
-            }
+    String key;
+
+    SCIM_DEBUG_FRONTEND (2) << " ibus_get_config_vector_int.\n";
+
+    if (m_receive_trans.get_data (key)) {
+        std::vector <int> vec;
+
+        SCIM_DEBUG_FRONTEND (3) << "  Key (" << key << ").\n";
+
+        if (m_config->read (key, &vec)) {
+            std::vector <uint32> reply;
+
+            for (uint32 i=0; i<vec.size (); ++i)
+                reply.push_back ((uint32) vec[i]);
+
+            m_send_trans.put_data (reply);
+            m_send_trans.put_command (SCIM_TRANS_CMD_OK);
         }
     }
-
-    m_panel_client.send ();
 }
-//void
-//IBusFrontEnd::panel_slot_commit_string (int context, const WideString &wstr)
-//{
-//    log_func();
-//
-//    X11IC *ic = m_ic_manager.find_ic (context);
-//    if (validate_ic (ic)) {
-//        ims_commit_string (ic, wstr);
-//    }
-//}
-void
-IBusFrontEnd::panel_slot_commit_string (int context, const WideString &wstr)
-{
-    log_func();
 
-    IBusInputContext *ic = find_ic (context);
-    if (!validate_ic (ic)) {
+void
+IBusFrontEnd::ibus_set_config_vector_int (int /*client_id*/)
+{
+    if (m_config_readonly || m_config.null ())
         return;
-    }
 
-    if (ic->notify_commit_text(utf8_wcstombs(wstr).c_str())) {
-        log_info("failed to notify commit text: %s", strerror(errno));
+    String key;
+    std::vector<uint32> vec;
+
+    SCIM_DEBUG_FRONTEND (2) << " ibus_set_config_vector_int.\n";
+
+    if (m_receive_trans.get_data (key) &&
+        m_receive_trans.get_data (vec)) {
+        std::vector<int> req;
+
+        SCIM_DEBUG_FRONTEND (3) << "  Key (" << key << ").\n";
+
+        for (uint32 i=0; i<vec.size (); ++i)
+            req.push_back ((int) vec[i]);
+
+        if (m_config->write (key, req))
+            m_send_trans.put_command (SCIM_TRANS_CMD_OK);
     }
-//    ims_commit_string (ic, wstr);
 }
-//void
-//IBusFrontEnd::panel_slot_forward_key_event (int context, const KeyEvent &key)
-//{
-//    log_func();
-//
-//    X11IC *ic = m_ic_manager.find_ic (context);
-//    if (validate_ic (ic)) {
-//        ims_forward_key_event (ic, key);
-//    }
-//}
-void
-IBusFrontEnd::panel_slot_forward_key_event (int context, const KeyEvent &key)
-{
-    log_func();
 
-    IBusInputContext *ic = find_ic (context);
-    if (validate_ic (ic)) {
-        // TODO convert key.mask to IBusModifierType
-        // TODO convert keyval
-        if (ic->notify_forward_key_event(0, key.code, key.mask) < 0) {
-            log_info("failed to notify forward key event: %s", strerror(errno));
+void
+IBusFrontEnd::ibus_load_file (int /*client_id*/)
+{
+    String filename;
+    char *bufptr = 0;
+    size_t filesize = 0;
+
+    SCIM_DEBUG_FRONTEND (2) << " ibus_load_file.\n";
+
+    if (m_receive_trans.get_data (filename)) {
+        SCIM_DEBUG_FRONTEND (3) << "  File (" << filename << ").\n";
+
+        if ((filesize = scim_load_file (filename, &bufptr)) > 0) {
+            m_send_trans.put_data (bufptr, filesize);
+            m_send_trans.put_command (SCIM_TRANS_CMD_OK);
         }
-//      ims_forward_key_event (ic, key);
-    }
-}
-void
-IBusFrontEnd::panel_slot_request_help (int context)
-{
-    log_func();
 
-    X11IC *ic = m_ic_manager.find_ic (context);
-    if (validate_ic (ic)) {
-        m_panel_client.prepare (ic->icid);
-        panel_req_show_help (ic);
-        m_panel_client.send ();
-    }
-}
-void
-IBusFrontEnd::panel_slot_request_factory_menu (int context)
-{
-    log_func();
-
-    X11IC *ic = m_ic_manager.find_ic (context);
-    if (validate_ic (ic)) {
-        m_panel_client.prepare (ic->icid);
-        panel_req_show_factory_menu (ic);
-        m_panel_client.send ();
-    }
-}
-void
-IBusFrontEnd::panel_slot_change_factory (int context, const String &uuid)
-{
-    log_func();
-
-    SCIM_DEBUG_FRONTEND (1) << "panel_slot_change_factory " << uuid << "\n";
-
-    X11IC *ic = m_ic_manager.find_ic (context);
-    if (validate_ic (ic)) {
-        m_panel_client.prepare (ic->icid);
-        if (uuid.length () == 0 && ic->xims_on) {
-            SCIM_DEBUG_FRONTEND (2) << "panel_slot_change_factory : turn off.\n";
-            ims_turn_off_ic (ic);
-        }else if(uuid.length () == 0 && (ic->xims_on == false)){
-    		panel_req_update_factory_info (ic);
-        	m_panel_client.turn_off (ic->icid);        	
-        }else if (uuid.length ()) {
-            String encoding = scim_get_locale_encoding (ic->locale);
-            String language = scim_get_locale_language (ic->locale);
-            if (validate_factory (uuid, encoding)) {
-                ims_turn_off_ic (ic);
-                replace_instance (ic->siid, uuid);
-                m_panel_client.register_input_context (ic->icid, get_instance_uuid (ic->siid));
-                set_ic_capabilities (ic);
-                set_default_factory (language, uuid);
-                ims_turn_on_ic (ic);
-            }
-        }
-        m_panel_client.send ();
-    }
-}
-
-//================ Panel Request methods ====================
-void
-IBusFrontEnd::panel_req_update_screen (const X11IC *ic)
-{
-    log_func();
-
-    Window target = ic->focus_win ? ic->focus_win : ic->client_win;
-    XWindowAttributes xwa;
-    if (target && 
-        XGetWindowAttributes (m_display, target, &xwa) &&
-        validate_ic (ic)) {
-        int num = ScreenCount (m_display);
-        int idx;
-        for (idx = 0; idx < num; ++ idx) {
-            if (ScreenOfDisplay (m_display, idx) == xwa.screen) {
-                m_panel_client.update_screen (ic->icid, idx);
-                return;
-            }
-        }
-    }
-}
-
-void
-IBusFrontEnd::panel_req_update_screen (IBusInputContext *ic)
-{
-    log_func_cant_mapped();
-
-//    Window target = ic->focus_win ? ic->focus_win : ic->client_win;
-//    XWindowAttributes xwa;
-//    if (target && 
-//        XGetWindowAttributes (m_display, target, &xwa) &&
-//        validate_ic (ic)) {
-//        int num = ScreenCount (m_display);
-//        int idx;
-//        for (idx = 0; idx < num; ++ idx) {
-//            if (ScreenOfDisplay (m_display, idx) == xwa.screen) {
-//                m_panel_client.update_screen (ic->icid, idx);
-//                return;
-//            }
-//        }
-//    }
-}
-
-void
-IBusFrontEnd::panel_req_show_help (const X11IC *ic)
-{
-    String help;
-    String tmp;
-
-    help =  String (_("Smart Common Input Method platform ")) +
-            String (SCIM_VERSION) +
-            String (_("\n(C) 2002-2005 James Su <suzhe@tsinghua.org.cn>\n\n"));
-
-    if (ic->xims_on) {
-        help += utf8_wcstombs (get_instance_name (ic->siid));
-        help += String (_(":\n\n"));
-
-        help += utf8_wcstombs (get_instance_authors (ic->siid));
-        help += String (_("\n\n"));
-
-        help += utf8_wcstombs (get_instance_help (ic->siid));
-        help += String (_("\n\n"));
-
-        help += utf8_wcstombs (get_instance_credits (ic->siid));
-    }
-
-    m_panel_client.show_help (ic->icid, help);
-}
-
-void
-IBusFrontEnd::panel_req_show_factory_menu (const X11IC *ic)
-{
-    std::vector<String> uuids;
-    if (get_factory_list_for_encoding (uuids, ic->encoding)) {
-        std::vector <PanelFactoryInfo> menu;
-        for (size_t i = 0; i < uuids.size (); ++ i) {
-            menu.push_back (PanelFactoryInfo (
-                                    uuids [i],
-                                    utf8_wcstombs (get_factory_name (uuids [i])),
-                                    get_factory_language (uuids [i]),
-                                    get_factory_icon_file (uuids [i])));
-        }
-        m_panel_client.show_factory_menu (ic->icid, menu);
-    }
-}
-
-void
-IBusFrontEnd::panel_req_show_factory_menu (IBusInputContext *ic)
-{
-    log_func();
-
-    std::vector<String> uuids;
-    if (get_factory_list_for_encoding (uuids, ic->get_encoding())) {
-        std::vector <PanelFactoryInfo> menu;
-        for (size_t i = 0; i < uuids.size (); ++ i) {
-            menu.push_back (PanelFactoryInfo (
-                                    uuids [i],
-                                    utf8_wcstombs (get_factory_name (uuids [i])),
-                                    get_factory_language (uuids [i]),
-                                    get_factory_icon_file (uuids [i])));
-        }
-        m_panel_client.show_factory_menu (ic->get_id(), menu);
-    }
-}
-
-void
-IBusFrontEnd::panel_req_focus_in (const X11IC * ic)
-{
-    m_panel_client.focus_in (ic->icid, get_instance_uuid (ic->siid));
-}
-
-void
-IBusFrontEnd::panel_req_focus_in (IBusInputContext *ic)
-{
-    log_func();
-
-    m_panel_client.focus_in (ic->get_id(), get_instance_uuid (ic->get_siid()));
-}
-
-void
-IBusFrontEnd::panel_req_update_factory_info (const X11IC *ic)
-{
-    if (is_focused_ic (ic)) {
-        PanelFactoryInfo info;
-        if (ic->xims_on) {
-            String uuid = get_instance_uuid (ic->siid);
-            info = PanelFactoryInfo (uuid, utf8_wcstombs (get_factory_name (uuid)), get_factory_language (uuid), get_factory_icon_file (uuid));
-        } else {
-            info = PanelFactoryInfo (String (""), String (_("English/Keyboard")), String ("C"), String (SCIM_KEYBOARD_ICON_FILE));
-        }
-        m_panel_client.update_factory_info (ic->icid, info);
-    }
-}
-
-void
-IBusFrontEnd::panel_req_update_factory_info (IBusInputContext *ic)
-{
-    log_func();
-
-    if (is_focused_ic (ic)) {
-        PanelFactoryInfo info;
-        if (ic->is_on()) {
-            String uuid = get_instance_uuid (ic->get_siid());
-            info = PanelFactoryInfo (uuid, utf8_wcstombs (get_factory_name (uuid)), get_factory_language (uuid), get_factory_icon_file (uuid));
-        } else {
-            info = PanelFactoryInfo (String (""), String (_("English/Keyboard")), String ("C"), String (SCIM_KEYBOARD_ICON_FILE));
-        }
-        m_panel_client.update_factory_info (ic->get_id(), info);
-    }
-}
-
-void
-IBusFrontEnd::panel_req_update_spot_location (const X11IC *ic)
-{
-    Window target = ic->focus_win ? ic->focus_win : ic->client_win;
-    XWindowAttributes xwa;
-
-    if (target && 
-        XGetWindowAttributes (m_display, target, &xwa) &&
-        validate_ic (ic)) {
-
-        int spot_x, spot_y;
-        Window child;
-
-        if (m_focus_ic->pre_attr.spot_location.x >= 0 &&
-            m_focus_ic->pre_attr.spot_location.y >= 0) {
-            XTranslateCoordinates (m_display, target,
-                xwa.root,
-                m_focus_ic->pre_attr.spot_location.x + 8,
-                m_focus_ic->pre_attr.spot_location.y + 8,
-                &spot_x, &spot_y, &child);
-        } else {
-            XTranslateCoordinates (m_display, target,
-                xwa.root,
-                0,
-                xwa.height,
-                &spot_x, &spot_y, &child);
-        }
-        m_panel_client.update_spot_location (ic->icid, spot_x, spot_y);
-    }
-}
-
-void
-IBusFrontEnd::panel_req_update_spot_location (IBusInputContext *ic)
-{
-    log_func ();
-
-    if (validate_ic (ic)) {
-        log_debug ("update panel location: x=%d, y=%d",
-                   ic->get_cursor_location().x,
-                   ic->get_cursor_location().y);
-        m_panel_client.update_spot_location (ic->get_id(),
-                                             ic->get_cursor_location().x,
-                                             ic->get_cursor_location().y);
+        delete [] bufptr;
     }
 }
 
 void
 IBusFrontEnd::reload_config_callback (const ConfigPointer &config)
 {
-    SCIM_DEBUG_FRONTEND(1) << "Reload configuration.\n";
+    SCIM_DEBUG_FRONTEND (1) << "Reload configuration.\n";
 
-    m_frontend_hotkey_matcher.load_hotkeys (config);
-    m_imengine_hotkey_matcher.load_hotkeys (config);
+    int max_clients = -1;
 
-    KeyEvent key;
+    m_config_readonly = config->read (String (SCIM_CONFIG_FRONTEND_IBUS_CONFIG_READONLY), false);
+    max_clients = config->read (String (SCIM_CONFIG_FRONTEND_IBUS_MAXCLIENTS), -1);
 
-    scim_string_to_key (key,
-        config->read (String (SCIM_CONFIG_HOTKEYS_FRONTEND_VALID_KEY_MASK),
-                      String ("Shift+Control+Alt+Lock")));
-
-    m_valid_key_mask = (key.mask > 0) ? key.mask : 0xFFFF;
-    m_valid_key_mask |= SCIM_KEY_ReleaseMask;
-    // Special treatment for two backslash keys on jp106 keyboard.
-    m_valid_key_mask |= SCIM_KEY_QuirkKanaRoMask;
-
-    m_broken_wchar =
-        config->read (String (SCIM_CONFIG_FRONTEND_IBUS_BROKEN_WCHAR),
-                      m_broken_wchar);
-
-    m_shared_input_method =
-        config->read (String (SCIM_CONFIG_FRONTEND_SHARED_INPUT_METHOD),
-                      m_shared_input_method);
-
-    // Get keyboard layout setting
-    // Flush the global config first, in order to load the new configs from disk.
-    scim_global_config_flush ();
-
-    m_keyboard_layout = scim_get_default_keyboard_layout ();
+    m_socket_server.set_max_clients (max_clients);
 }
 
-void
-IBusFrontEnd::fallback_commit_string_cb (IMEngineInstanceBase * si, const WideString & str)
+int IBusFrontEnd::portal_create_ctx(sd_bus_message *m,
+                                    sd_bus_error *ret_error)
 {
-    if (validate_ic (m_focus_ic))
-        ims_commit_string (m_focus_ic, str);
+    log_func_not_impl(-ENOSYS);
 }
 
+int IBusFrontEnd::srv_destroy(sd_bus_message *m, sd_bus_error *ret_error)
+{
+    log_func_not_impl(-ENOSYS);
+}
+
+int IBusFrontEnd::ctx_process_key_event(sd_bus_message *m, sd_bus_error *ret_error)
+{
+    log_func_not_impl(-ENOSYS);
+
+//    uint32_t keyval = 0;
+//    uint32_t keycode = 0;
+//    uint32_t state = 0;
+//
+//    if (sd_bus_message_read(m, "uuu", &keyval, &keycode, &state) < 0) {
+//        return -1;
+//    }
+//
+//    bool processed = m_observer->input_context_process_key_event(this,
+//                                                               keyval,
+//                                                               keycode,
+//                                                               state);
+//    return sd_bus_reply_method_return(m, "b", processed);
+}
+
+int IBusFrontEnd::ctx_set_cursor_location(sd_bus_message *m, sd_bus_error *ret_error)
+{
+    log_func_not_impl(-ENOSYS);
+
+//    if (sd_bus_message_read(m,
+//                            "iiii",
+//                            &m_cursor_location.x,
+//                            &m_cursor_location.y,
+//                            &m_cursor_location.h,
+//                            &m_cursor_location.y) < 0) {
+//        return -1;
+//    }
+//
+//    m_observer->input_context_cursor_location_updated(this);
+//
+//    return 0;
+}
+
+int IBusFrontEnd::ctx_set_cursor_location_relative(sd_bus_message *m, sd_bus_error *ret_error)
+{
+    log_func_not_impl(-ENOSYS);
+
+//    IBusRect rect; 
+//    if (sd_bus_message_read(m, "iiii", &rect.x, &rect.y, &rect.h, &rect.y) < 0) {
+//        return -1;
+//    }
+//
+//    m_cursor_location.x += rect.x;
+//    m_cursor_location.y += rect.y;
+//    m_cursor_location.w += rect.w;
+//    m_cursor_location.h += rect.h;
+//
+//    return 0;
+}
+
+
+int IBusFrontEnd::ctx_process_hand_writing_event(sd_bus_message *m, sd_bus_error *ret_error)
+{
+    log_func_not_impl (-ENOSYS);
+}
+
+int IBusFrontEnd::ctx_cancel_hand_writing(sd_bus_message *m, sd_bus_error *ret_error)
+{
+    log_func_not_impl (-ENOSYS);
+}
+
+int IBusFrontEnd::ctx_property_activate(sd_bus_message *m, sd_bus_error *ret_error)
+{
+    log_func_not_impl (-ENOSYS);
+}
+
+int IBusFrontEnd::ctx_set_engine(sd_bus_message *m, sd_bus_error *ret_error)
+{
+    log_func_not_impl (-ENOSYS);
+}
+
+int IBusFrontEnd::ctx_get_engine(sd_bus_message *m, sd_bus_error *ret_error)
+{
+    log_func_not_impl (-ENOSYS);
+}
+
+int IBusFrontEnd::ctx_set_surrounding_text(sd_bus_message *m, sd_bus_error *ret_error)
+{
+    log_func_not_impl (-ENOSYS);
+}
+
+int IBusFrontEnd::ctx_focus_in(sd_bus_message *m, sd_bus_error *ret_error)
+{
+    log_func_not_impl (-ENOSYS);
+
+//    m_observer->input_context_focus_in(this);
+//
+//    return 0;
+}
+
+int IBusFrontEnd::ctx_focus_out(sd_bus_message *m, sd_bus_error *ret_error)
+{
+    log_func_not_impl (-ENOSYS);
+
+//    m_observer->input_context_focus_out(this);
+//
+//    return 0;
+}
+
+int IBusFrontEnd::ctx_reset(sd_bus_message *m, sd_bus_error *ret_error)
+{
+    log_func_not_impl (-ENOSYS);
+
+//    m_observer->input_context_reset(this);
+//
+//    return 0;
+}
+
+int IBusFrontEnd::ctx_set_capabilities(sd_bus_message *m, sd_bus_error *ret_error)
+{
+    log_func_not_impl (-ENOSYS);
+
+//    if (sd_bus_message_read(m, "u", &m_capabilities) < 0) {
+//        return -1;
+//    }
+//
+//    log_debug("capabilities = %s", ibus_caps_to_str(m_capabilities).c_str());
+//
+//    m_observer->input_context_capability_updated(this);
+//
+//    return 0;
+}
+
+int IBusFrontEnd::ctx_get_client_commit_preedit (sd_bus *bus,
+                                                 const char *path,
+                                                 const char *interface,
+                                                 const char *property,
+                                                 sd_bus_message *value,
+                                                 sd_bus_error *ret_error)
+{
+    log_func_not_impl (-ENOSYS);
+
+//    if (sd_bus_message_open_container(value, 'r', "b") < 0) {
+//        return -1;
+//    }
+//
+//    bool v = m_client_commit_preedit;
+//    if (sd_bus_message_append(value, "b", v) < 0) {
+//        return -1;
+//    }
+//
+//    return sd_bus_message_close_container(value);
+}
+
+int IBusFrontEnd::ctx_set_client_commit_preedit (sd_bus *bus,
+                                                 const char *path,
+                                                 const char *interface,
+                                                 const char *property,
+                                                 sd_bus_message *value,
+                                                 sd_bus_error *ret_error)
+{
+    log_func_not_impl (-ENOSYS);
+
+//    if (sd_bus_message_enter_container(value, 'r', "uu") < 0) {
+//        return -1;
+//    }
+//
+//    return sd_bus_message_read(value, "uu", &m_purpose, &m_hints);
+}
+
+int IBusFrontEnd::ctx_get_content_type (sd_bus *bus,
+                                        const char *path,
+                                        const char *interface,
+                                        const char *property,
+                                        sd_bus_message *value,
+                                        sd_bus_error *ret_error)
+{
+    log_func_not_impl (-ENOSYS);
+
+//    if (sd_bus_message_open_container(value, 'r', "uu") < 0) {
+//        return -1;
+//    }
+//
+//    if (sd_bus_message_append(value, "uu", m_purpose, m_hints) < 0) {
+//        return -1;
+//    }
+//
+//    return sd_bus_message_close_container(value);
+}
+
+int IBusFrontEnd::ctx_set_content_type (sd_bus *bus,
+                                        const char *path,
+                                        const char *interface,
+                                        const char *property,
+                                        sd_bus_message *value,
+                                        sd_bus_error *ret_error)
+{
+    log_func_not_impl (-ENOSYS);
+
+//    if (sd_bus_message_enter_container(value, 'r', "uu") < 0) {
+//        return -1;
+//    }
+//
+//    if (sd_bus_message_read(value, "uu", &m_purpose, &m_hints) < 0) {
+//        return -1;
+//    }
+//
+//    return 0;
+}
 /*
 vi:ts=4:nowrap:expandtab
 */

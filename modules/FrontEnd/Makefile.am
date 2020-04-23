@@ -87,9 +87,7 @@ socket_la_LDFLAGS	= -avoid-version \
 
 socket_la_LIBADD	= $(top_builddir)/src/libscim@SCIM_EPOCH@.la
 
-ibus_la_SOURCES 	= scim_ibus_frontend.cpp \
-			  scim_x11_ic.cpp \
-			  scim_ibus_ic.cpp
+ibus_la_SOURCES 	= scim_ibus_frontend.cpp
 
 ibus_la_CFLAGS		= @SD_CFLAGS@ @X_CFLAGS@
 
@@ -99,11 +97,7 @@ ibus_la_LDFLAGS		= -avoid-version \
 		     	  -rpath $(moduledir) \
 			  -module \
 			  @LIBTOOL_EXPORT_OPTIONS@ \
-			  @X_LIBS@ \
-			  @SD_LIBS@ \
-			  @LTLIBINTL@
+			  @SD_LIBS@
 
-ibus_la_LIBADD		= IMdkit/libXimd.la \
-			  $(top_builddir)/src/libscim@SCIM_EPOCH@.la \
-			  $(top_builddir)/utils/libscim-x11utils@SCIM_EPOCH@.la
+ibus_la_LIBADD		= $(top_builddir)/src/libscim@SCIM_EPOCH@.la
 

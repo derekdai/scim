@@ -53,9 +53,8 @@ enum {
 #define log_error(fmt, ...)                       log_print(LOG_LEVEL_ERROR, fmt, ##__VA_ARGS__)
 #define log_fatal(fmt, ...)                       log_print(LOG_LEVEL_FATAL, fmt, ##__VA_ARGS__)
 #define log_func()                                log_trace("%s", __FUNCTION__)
-#define log_func_not_impl()                       log_trace("%s not implement yet", __FUNCTION__)
-#define log_func_incomplete()                     log_trace("%s implementation incomplete", __FUNCTION__)
-#define log_func_cant_mapped()                    log_trace("%s can not be mapped", __FUNCTION__)
+#define log_func_not_impl(...)                    ({ log_error("%s not implement yet", __FUNCTION__); return __VA_ARGS__; })
+#define log_func_incomplete(...)                  ({ log_error("%s implementation incomplete", __FUNCTION__); return __VA_ARGS__; })
 
 #ifndef SD_BUS_METHOD_WITH_NAMES
 #define SD_BUS_METHOD_WITH_NAMES( member, signature, in_names, result, out_names, handler, flags) \
@@ -119,108 +118,108 @@ sd_bus_prop_adapter(sd_bus *bus,
     return (static_cast<T *>(userdata)->*mf)(bus, path, interface, property, value, ret_error);
 }
 
-static inline uint16_t
-scim_ibus_keystate_to_scim (uint32_t state)
-{
-    uint16_t mask = 0;
-
-    // Check Meta mask first, because it's maybe a mask combination.
-    if (state & IBUS_META_MASK) {
-        mask |= scim::SCIM_KEY_MetaMask;
-    }
-
-    if (state & IBUS_SHIFT_MASK) {
-        mask |= scim::SCIM_KEY_ShiftMask;
-    }
-
-    if (state & IBUS_LOCK_MASK) {
-        mask |= scim::SCIM_KEY_CapsLockMask;
-    }
-
-    if (state & IBUS_CONTROL_MASK) {
-        mask |= scim::SCIM_KEY_ControlMask;
-    }
-
-    if (state & IBUS_MOD1_MASK) {
-        mask |= scim::SCIM_KEY_AltMask;
-    }
-
-    if (state & IBUS_SUPER_MASK) {
-        mask |= scim::SCIM_KEY_SuperMask;
-    }
-
-    if (state & IBUS_HYPER_MASK) {
-        mask |= scim::SCIM_KEY_HyperMask;
-    }
-
-    if (state & IBUS_MOD2_MASK) {
-        mask |= scim::SCIM_KEY_NumLockMask;
-    }
-
-    return mask;
-}
-
-static inline scim::KeyEvent
-scim_ibus_keyevent_to_scim (uint32_t keyval, uint32_t keycode, uint32_t state)
-{
-    scim::KeyEvent  scimkey;
-//    KeySym          keysym;
-//    XKeyEvent       key = xkey;
-//    char            buf [32];
-
-    scimkey.code = keyval;
-
-    scimkey.mask = scim_ibus_keystate_to_scim (state);
-
-    if (state & IBUS_RELEASE_MASK) scimkey.mask |= scim::SCIM_KEY_ReleaseMask;
-
-//    if (scimkey.code == SCIM_KEY_backslash) {
-//        int keysym_size = 0;
-//        KeySym *keysyms = XGetKeyboardMapping (display, xkey.keycode, 1, &keysym_size);
-//        if (keysyms != NULL) {
-//            if (keysyms[0] == XK_backslash &&
-//		(keysym_size > 1 && keysyms[1] == XK_underscore))
-//                scimkey.mask |= SCIM_KEY_QuirkKanaRoMask;
-//            XFree (keysyms);
-//        }
+//static inline uint16_t
+//scim_ibus_keystate_to_scim (uint32_t state)
+//{
+//    uint16_t mask = 0;
+//
+//    // Check Meta mask first, because it's maybe a mask combination.
+//    if (state & IBUS_META_MASK) {
+//        mask |= scim::SCIM_KEY_MetaMask;
 //    }
-
-    return scimkey;
-}
-
-#if LOG_LEVEL >= LOG_LEVEL_DEBUG
-static inline std::string ibus_caps_to_str(uint32_t caps)
-{
-    std::ostringstream ss;
-    if (caps & IBUS_CAP_PREEDIT_TEXT) {
-        ss << "preedit-text|";
-    }
-    if (caps & IBUS_CAP_AUXILIARY_TEXT) {
-        ss << "aux-text|";
-    }
-    if (caps & IBUS_CAP_LOOKUP_TABLE) {
-        ss << "lookup-table|";
-    }
-    if (caps & IBUS_CAP_FOCUS) {
-        ss << "focus|";
-    }
-    if (caps & IBUS_CAP_PROPERTY) {
-        ss << "property|";
-    }
-    if (caps & IBUS_CAP_SURROUNDING_TEXT) {
-        ss << "surrounding-text|";
-    }
-
-    std::string s = ss.str();
-    if (s.size() > 0) {
-        s.resize(s.size() - 1);
-    }
-
-    return s;
-}
-#else
-#define ibus_caps_to_str(caps)
-#endif
+//
+//    if (state & IBUS_SHIFT_MASK) {
+//        mask |= scim::SCIM_KEY_ShiftMask;
+//    }
+//
+//    if (state & IBUS_LOCK_MASK) {
+//        mask |= scim::SCIM_KEY_CapsLockMask;
+//    }
+//
+//    if (state & IBUS_CONTROL_MASK) {
+//        mask |= scim::SCIM_KEY_ControlMask;
+//    }
+//
+//    if (state & IBUS_MOD1_MASK) {
+//        mask |= scim::SCIM_KEY_AltMask;
+//    }
+//
+//    if (state & IBUS_SUPER_MASK) {
+//        mask |= scim::SCIM_KEY_SuperMask;
+//    }
+//
+//    if (state & IBUS_HYPER_MASK) {
+//        mask |= scim::SCIM_KEY_HyperMask;
+//    }
+//
+//    if (state & IBUS_MOD2_MASK) {
+//        mask |= scim::SCIM_KEY_NumLockMask;
+//    }
+//
+//    return mask;
+//}
+//
+//static inline scim::KeyEvent
+//scim_ibus_keyevent_to_scim (uint32_t keyval, uint32_t keycode, uint32_t state)
+//{
+//    scim::KeyEvent  scimkey;
+////    KeySym          keysym;
+////    XKeyEvent       key = xkey;
+////    char            buf [32];
+//
+//    scimkey.code = keyval;
+//
+//    scimkey.mask = scim_ibus_keystate_to_scim (state);
+//
+//    if (state & IBUS_RELEASE_MASK) scimkey.mask |= scim::SCIM_KEY_ReleaseMask;
+//
+////    if (scimkey.code == SCIM_KEY_backslash) {
+////        int keysym_size = 0;
+////        KeySym *keysyms = XGetKeyboardMapping (display, xkey.keycode, 1, &keysym_size);
+////        if (keysyms != NULL) {
+////            if (keysyms[0] == XK_backslash &&
+////		(keysym_size > 1 && keysyms[1] == XK_underscore))
+////                scimkey.mask |= SCIM_KEY_QuirkKanaRoMask;
+////            XFree (keysyms);
+////        }
+////    }
+//
+//    return scimkey;
+//}
+//
+//#if LOG_LEVEL >= LOG_LEVEL_DEBUG
+//static inline std::string ibus_caps_to_str(uint32_t caps)
+//{
+//    std::ostringstream ss;
+//    if (caps & IBUS_CAP_PREEDIT_TEXT) {
+//        ss << "preedit-text|";
+//    }
+//    if (caps & IBUS_CAP_AUXILIARY_TEXT) {
+//        ss << "aux-text|";
+//    }
+//    if (caps & IBUS_CAP_LOOKUP_TABLE) {
+//        ss << "lookup-table|";
+//    }
+//    if (caps & IBUS_CAP_FOCUS) {
+//        ss << "focus|";
+//    }
+//    if (caps & IBUS_CAP_PROPERTY) {
+//        ss << "property|";
+//    }
+//    if (caps & IBUS_CAP_SURROUNDING_TEXT) {
+//        ss << "surrounding-text|";
+//    }
+//
+//    std::string s = ss.str();
+//    if (s.size() > 0) {
+//        s.resize(s.size() - 1);
+//    }
+//
+//    return s;
+//}
+//#else
+//#define ibus_caps_to_str(caps)
+//#endif
 
 #endif // _SCIM_IBUS_UTILS_H
 
