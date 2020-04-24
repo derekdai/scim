@@ -34,8 +34,12 @@
 
 using namespace scim;
 
+class IBusCtx;
+
 class IBusFrontEnd : public FrontEndBase
 {
+    friend class IBusCtx;
+
     enum ClientType {
         UNKNOWN_CLIENT,
         IMENGINE_CLIENT,
@@ -60,39 +64,54 @@ class IBusFrontEnd : public FrontEndBase
     typedef std::map <int, ClientInfo>                                      IBusClientRepository;
 #endif
 
-    ConfigPointer     m_config;
+    typedef std::map <int, IBusCtx*>                                        IBusIDCtxMap;
 
-    SocketServer      m_socket_server;
+    ConfigPointer           m_config;
 
-    Transaction       m_send_trans;
-    Transaction       m_receive_trans;
-    Transaction       m_temp_trans;
+    SocketServer            m_socket_server;
 
-    IBusInstanceRepository m_socket_instance_repository;
+    Transaction             m_send_trans;
+    Transaction             m_receive_trans;
+    Transaction             m_temp_trans;
 
-    IBusClientRepository   m_socket_client_repository;
+    IBusInstanceRepository  m_socket_instance_repository;
 
-    bool   m_stay;
+    IBusClientRepository    m_socket_client_repository;
 
-    bool   m_config_readonly;
+    FrontEndHotkeyMatcher   m_frontend_hotkey_matcher;
 
-    int    m_socket_timeout;
+    IMEngineHotkeyMatcher   m_imengine_hotkey_matcher;
 
-    int    m_current_instance;
+    bool                    m_stay;
 
-    int    m_current_socket_client;
+    bool                    m_config_readonly;
 
-    uint32 m_current_socket_client_key;
+    int                     m_socket_timeout;
 
-    int    m_ctx_counter;
+    // siid
+    int                     m_current_instance;
 
-    sd_event         *m_loop; 
-    sd_bus           *m_bus; 
-    sd_bus_slot      *m_portal_slot;
+    int                     m_current_socket_client;
 
-    static const sd_bus_vtable m_portal_vtbl[];
-    static const sd_bus_vtable m_inputcontext_vtbl[];
-    static const sd_bus_vtable m_service_vtbl[];
+    IBusCtx                *m_current_ibus_ctx;
+
+    uint32                  m_current_socket_client_key;
+
+    PanelClient             m_panel_client;
+
+    int                     m_ctx_counter;
+
+    IBusIDCtxMap            m_id_ctx_map;
+    IBusIDCtxMap            m_siid_ctx_map;
+
+    sd_event               *m_loop; 
+    sd_bus                 *m_bus; 
+    sd_bus_slot            *m_portal_slot;
+//    sd_bus_slot            *m_ctx_enum_slot;
+//    sd_bus_slot            *m_obj_mngr_slot;
+    sd_event_source        *m_panel_source;
+
+    static const            sd_bus_vtable m_portal_vtbl[];
 
 public:
     IBusFrontEnd (const BackEndPointer &backend,
@@ -101,32 +120,36 @@ public:
     virtual ~IBusFrontEnd ();
 
 protected:
-    virtual void show_preedit_string     (int id);
-    virtual void show_aux_string         (int id);
-    virtual void show_lookup_table       (int id);
+    /**
+     * vitual functions to notify client something happened,
+     * see scim_frontend.cpp for explaination
+     */
+    virtual void show_preedit_string     (int siid);
+    virtual void show_aux_string         (int siid);
+    virtual void show_lookup_table       (int siid);
 
-    virtual void hide_preedit_string     (int id);
-    virtual void hide_aux_string         (int id);
-    virtual void hide_lookup_table       (int id);
+    virtual void hide_preedit_string     (int siid);
+    virtual void hide_aux_string         (int siid);
+    virtual void hide_lookup_table       (int siid);
 
-    virtual void update_preedit_caret    (int id, int caret);
-    virtual void update_preedit_string   (int id, const WideString & str, const AttributeList & attrs);
-    virtual void update_aux_string       (int id, const WideString & str, const AttributeList & attrs);
-    virtual void commit_string           (int id, const WideString & str);
-    virtual void forward_key_event       (int id, const KeyEvent & key);
-    virtual void update_lookup_table     (int id, const LookupTable & table);
+    virtual void update_preedit_caret    (int siid, int caret);
+    virtual void update_preedit_string   (int siid, const WideString & str, const AttributeList & attrs);
+    virtual void update_aux_string       (int siid, const WideString & str, const AttributeList & attrs);
+    virtual void commit_string           (int siid, const WideString & str);
+    virtual void forward_key_event       (int siid, const KeyEvent & key);
+    virtual void update_lookup_table     (int siid, const LookupTable & table);
 
-    virtual void register_properties     (int id, const PropertyList & properties);
-    virtual void update_property         (int id, const Property & property);
+    virtual void register_properties     (int siid, const PropertyList & properties);
+    virtual void update_property         (int siid, const Property & property);
 
-    virtual void beep                    (int id);
+    virtual void beep                    (int siid);
 
-    virtual void start_helper            (int id, const String &helper_uuid);
-    virtual void stop_helper             (int id, const String &helper_uuid);
-    virtual void send_helper_event       (int id, const String &helper_uuid, const Transaction &trans);
+    virtual void start_helper            (int siid, const String &helper_uuid);
+    virtual void stop_helper             (int siid, const String &helper_uuid);
+    virtual void send_helper_event       (int siid, const String &helper_uuid, const Transaction &trans);
 
-    virtual bool get_surrounding_text    (int id, WideString &text, int &cursor, int maxlen_before, int maxlen_after);
-    virtual bool delete_surrounding_text (int id, int offset, int len);
+    virtual bool get_surrounding_text    (int siid, WideString &text, int &cursor, int maxlen_before, int maxlen_after);
+    virtual bool delete_surrounding_text (int siid, int offset, int len);
 
 public:
     virtual void init (int argc, char **argv);
@@ -135,18 +158,19 @@ public:
 private:
 //    uint32 generate_key () const;
     int generate_ctx_id ();
+    bool is_current_ctx                   (const IBusCtx *ctx) const { return ctx == m_current_ibus_ctx; }
 
-    bool check_client_connection (const Socket &client) const;
+    bool check_client_connection          (const Socket &client) const;
 
-    void ibus_accept_callback    (SocketServer *server, const Socket &client);
-    void ibus_receive_callback   (SocketServer *server, const Socket &client);
-    void ibus_exception_callback (SocketServer *server, const Socket &client);
+    void ibus_accept_callback             (SocketServer *server, const Socket &client);
+    void ibus_receive_callback            (SocketServer *server, const Socket &client);
+    void ibus_exception_callback          (SocketServer *server, const Socket &client);
 
-    bool ibus_open_connection    (SocketServer *server, const Socket &client);
-    void ibus_close_connection   (SocketServer *server, const Socket &client);
-    ClientInfo ibus_get_client_info (const Socket &client);
+    bool ibus_open_connection             (SocketServer *server, const Socket &client);
+    void ibus_close_connection            (SocketServer *server, const Socket &client);
+    ClientInfo ibus_get_client_info       (const Socket &client);
 
-    //client_id is client's ibus id
+    // functions called by client
     void ibus_get_factory_list            (int client_id);
     void ibus_get_factory_name            (int client_id);
     void ibus_get_factory_authors         (int client_id);
@@ -193,59 +217,80 @@ private:
 
     void reload_config_callback (const ConfigPointer &config);
 
-    int portal_create_ctx                 (sd_bus_message *m,
-                                           sd_bus_error *ret_error);
-    int srv_destroy                       (sd_bus_message *m,
-                                           sd_bus_error *ret_error);
-    int ctx_focus_in                      (sd_bus_message *m,
-                                           sd_bus_error *ret_error);
-    int ctx_focus_out                     (sd_bus_message *m,
-                                           sd_bus_error *ret_error);
-    int ctx_reset                         (sd_bus_message *m,
-                                           sd_bus_error *ret_error);
-    int ctx_process_key_event             (sd_bus_message *m,
-                                           sd_bus_error *ret_error);
-    int ctx_set_cursor_location           (sd_bus_message *m,
-                                           sd_bus_error *ret_error);
-    int ctx_set_cursor_location_relative  (sd_bus_message *m,
-                                           sd_bus_error *ret_error);
-    int ctx_process_hand_writing_event    (sd_bus_message *m,
-                                           sd_bus_error *ret_error);
-    int ctx_cancel_hand_writing           (sd_bus_message *m,
-                                           sd_bus_error *ret_error);
-    int ctx_property_activate(sd_bus_message *m, sd_bus_error *ret_error);
-    int ctx_set_engine                    (sd_bus_message *m,
-                                           sd_bus_error *ret_error);
-    int ctx_get_engine                    (sd_bus_message *m,
-                                           sd_bus_error *ret_error);
-    int ctx_set_surrounding_text          (sd_bus_message *m,
-                                           sd_bus_error *ret_error);
-    int ctx_set_capabilities              (sd_bus_message *m,
-                                           sd_bus_error *ret_error);
-    int ctx_get_client_commit_preedit     (sd_bus *bus,
- 	                                        const char *path,
- 	                                        const char *interface,
- 	                                        const char *property,
- 	                                        sd_bus_message *value,
- 	                                        sd_bus_error *ret_error);
-    int ctx_set_client_commit_preedit     (sd_bus *bus,
- 	                                       const char *path,
- 	                                       const char *interface,
- 	                                       const char *property,
- 	                                       sd_bus_message *value,
- 	                                       sd_bus_error *ret_error);
-    int ctx_get_content_type              (sd_bus *bus,
- 	                                       const char *path,
- 	                                       const char *interface,
- 	                                       const char *property,
- 	                                       sd_bus_message *value,
- 	                                       sd_bus_error *ret_error);
-    int ctx_set_content_type              (sd_bus *bus,
- 	                                       const char *path,
- 	                                       const char *interface,
- 	                                       const char *property,
- 	                                       sd_bus_message *value,
- 	                                       sd_bus_error *ret_error);
+    // IBus callbacks
+    int portal_create_ctx                 (sd_bus_message *m);
+    int srv_destroy                       (IBusCtx *ctx, sd_bus_message *m);
+    int ctx_focus_in                      (IBusCtx *ctx, sd_bus_message *m);
+    int ctx_focus_out                     (IBusCtx *ctx, sd_bus_message *m);
+    int ctx_reset                         (IBusCtx *ctx, sd_bus_message *m);
+    int ctx_process_key_event             (IBusCtx *ctx, sd_bus_message *m);
+    int ctx_set_cursor_location           (IBusCtx *ctx, sd_bus_message *m);
+    int ctx_set_cursor_location_relative  (IBusCtx *ctx, sd_bus_message *m);
+    int ctx_process_hand_writing_event    (IBusCtx *ctx, sd_bus_message *m);
+    int ctx_cancel_hand_writing           (IBusCtx *ctx, sd_bus_message *m);
+    int ctx_property_activate             (IBusCtx *ctx, sd_bus_message *m);
+    int ctx_set_engine                    (IBusCtx *ctx, sd_bus_message *m);
+    int ctx_get_engine                    (IBusCtx *ctx, sd_bus_message *m);
+    int ctx_set_surrounding_text          (IBusCtx *ctx, sd_bus_message *m);
+    int ctx_set_capabilities              (IBusCtx *ctx, sd_bus_message *m);
+    int ctx_get_client_commit_preedit     (IBusCtx *ctx, sd_bus_message *value);
+    int ctx_set_client_commit_preedit     (IBusCtx *ctx, sd_bus_message *value);
+    int ctx_get_content_type              (IBusCtx *ctx, sd_bus_message *value);
+    int ctx_set_content_type              (IBusCtx *ctx, sd_bus_message *value);
+
+    IBusCtx *find_ctx_by_siid             (int siid) const;
+    IBusCtx *find_ctx                     (int id) const;
+    IBusCtx *find_ctx                     (const char *path) const;
+
+    inline bool validate_ctx              (IBusCtx *ctx) const;
+
+    void start_ctx                        (IBusCtx *ctx);
+    void stop_ctx                         (IBusCtx *ctx);
+    void signal_ctx                       (int siid,
+                                           const char *signal,
+                                           ...) const;
+//    static int find_ctx                   (sd_bus *bus,
+//                                           const char *path,
+//                                           const char *interface,
+//                                           void *userdata,
+//                                           void **ret_found,
+//                                           sd_bus_error *ret_error);
+//    static int enum_ctx                   (sd_bus *bus,
+//                                           const char *prefix,
+//                                           void *userdata,
+//                                           char ***ret_nodes,
+//                                           sd_bus_error *ret_error);
+
+    int panel_connect                     ();
+    void panel_disconnect                 ();
+    int panel_handle_io                   (sd_event_source *s,
+                                           int fd,
+                                           uint32_t revents);
+
+    void panel_slot_reload_config (int client_id);
+    void panel_slot_exit          (int client_id);
+    void panel_slot_update_lookup_table_page_size (int client_id, int page_size);
+    void panel_slot_lookup_table_page_up (int client_id);
+    void panel_slot_lookup_table_page_down (int client_id);
+    void panel_slot_trigger_property (int client_id, const String &property);
+    void panel_slot_process_helper_event (int client_id, const String &target_uuid, const String &helper_uuid, const Transaction &trans);
+    void panel_slot_move_preedit_caret (int client_id, int caret_pos);
+    void panel_slot_select_candidate (int client_id, int cand_index);
+    void panel_slot_process_key_event (int client_id, const KeyEvent &key);
+    void panel_slot_commit_string (int client_id, const WideString &wstr);
+    void panel_slot_forward_key_event (int client_id, const KeyEvent &key);
+    void panel_slot_request_help (int client_id);
+    void panel_slot_request_factory_menu (int client_id);
+    void panel_slot_change_factory (int client_id, const String &uuid);
+
+    void panel_req_update_screen          (const IBusCtx *ctx);
+    void panel_req_show_help              (const IBusCtx *ctx);
+    void panel_req_show_factory_menu      (const IBusCtx *ctx);
+    void panel_req_focus_in               (const IBusCtx *ctx);
+    void panel_req_update_factory_info    (const IBusCtx *ctx);
+    void panel_req_update_spot_location   (const IBusCtx *ctx);
+
+    bool filter_hotkeys                   (IBusCtx *ctx, const KeyEvent &key);
 };
 
 #endif

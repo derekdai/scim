@@ -65,161 +65,143 @@ enum {
 #define SD_BUS_PARAM(name)
 #endif
 
-template<typename T, int (T::*mf)(sd_event_source *s, int fd, uint32_t revents)>
-int
-sd_event_io_adapter(sd_event_source *s, int fd, uint32_t revents, void *userdata)
+static inline uint16_t
+scim_ibus_keystate_to_scim_keymask (uint32_t state)
 {
-    return (static_cast<T *>(userdata)->*mf)(s, fd, revents);
+    uint16_t mask = 0;
+
+    if (state & IBUS_SHIFT_MASK) {
+        mask |= scim::SCIM_KEY_ShiftMask;
+    }
+
+    if (state & IBUS_LOCK_MASK) {
+        mask |= scim::SCIM_KEY_CapsLockMask;
+    }
+
+    if (state & IBUS_CONTROL_MASK) {
+        mask |= scim::SCIM_KEY_ControlMask;
+    }
+
+    if (state & IBUS_MOD1_MASK) {
+        mask |= scim::SCIM_KEY_AltMask;
+    }
+
+    if (state & IBUS_META_MASK) {
+        mask |= scim::SCIM_KEY_MetaMask;
+    }
+
+    if (state & IBUS_SUPER_MASK) {
+        mask |= scim::SCIM_KEY_SuperMask;
+    }
+
+    if (state & IBUS_HYPER_MASK) {
+        mask |= scim::SCIM_KEY_HyperMask;
+    }
+
+    if (state & IBUS_MOD2_MASK) {
+        mask |= scim::SCIM_KEY_NumLockMask;
+    }
+
+    if (state & IBUS_RELEASE_MASK) {
+        mask |= SCIM_KEY_ReleaseMask;
+    }
+
+    return mask;
 }
 
-template<typename T, int (T::*mf)(sd_event_source *s)>
-int
-sd_event_adapter(sd_event_source *s, void *userdata)
+static inline std::string
+scim_caps_to_str (uint32_t caps)
 {
-    return (static_cast<T *>(userdata)->*mf)(s);
+    std::ostringstream ss;
+
+    if (caps & SCIM_CLIENT_CAP_ONTHESPOT_PREEDIT)
+    {
+        ss << "onthespo-preedit|";
+    }
+    if (caps & SCIM_CLIENT_CAP_SINGLE_LEVEL_PROPERTY)
+    {
+        ss << "single-level-prop|";
+    }
+    if (caps & SCIM_CLIENT_CAP_MULTI_LEVEL_PROPERTY)
+    {
+        ss << "multi-level-prop|";
+    }
+    if (caps & SCIM_CLIENT_CAP_TRIGGER_PROPERTY)
+    {
+        ss << "trigger-prop|";
+    }
+    if (caps & SCIM_CLIENT_CAP_HELPER_MODULE)
+    {
+        ss << "helper-module|";
+    }
+    if (caps & SCIM_CLIENT_CAP_SURROUNDING_TEXT)
+    {
+        ss << "surrounding-text|";
+    }
+
+    std::string s = ss.str();
+    if (s.size() > 0) {
+        s.resize(s.size() - 1);
+    }
+
+    return s;
 }
 
-template<typename T, int (T::*mf)(sd_bus_message *m, sd_bus_error *ret_error)>
-int
-sd_bus_message_adapter(sd_bus_message *m, void *userdata, sd_bus_error *ret_error)
+static inline scim::KeyEvent
+scim_ibus_keyevent_to_scim_keyevent (KeyboardLayout layout,
+                                     uint32_t keyval,
+                                     uint32_t keycode,
+                                     uint32_t state)
 {
-    uint8_t type;
-    sd_bus_message_get_type(m, &type);
-    log_trace("%s %s %s.%s",
-            sd_bus_message_get_sender(m),
-            type == SD_BUS_MESSAGE_METHOD_CALL
-                ? "calls"
-                : type == SD_BUS_MESSAGE_SIGNAL
-                    ? "signals"
-                    : "",
-            sd_bus_message_get_interface(m),
-            sd_bus_message_get_member(m));
-    sd_bus_message_dump(m, stderr, 0);
-    sd_bus_message_rewind(m, 1);
+     return KeyEvent (keyval,
+                      scim_ibus_keystate_to_scim_keymask (state),
+                      layout);
 
-    return (static_cast<T *>(userdata)->*mf)(m, ret_error);
+//    if (scimkey.code == SCIM_KEY_backslash) {
+//        int keysym_size = 0;
+//        KeySym *keysyms = XGetKeyboardMapping (display, xkey.keycode, 1, &keysym_size);
+//        if (keysyms != NULL) {
+//            if (keysyms[0] == XK_backslash &&
+//		(keysym_size > 1 && keysyms[1] == XK_underscore))
+//                scimkey.mask |= SCIM_KEY_QuirkKanaRoMask;
+//            XFree (keysyms);
+//        }
+//    }
 }
 
-template<typename T, int (T::*mf)(sd_bus *bus,
- 	                              const char *path,
- 	                              const char *interface,
- 	                              const char *property,
- 	                              sd_bus_message *value,
- 	                              sd_bus_error *ret_error)>
-int
-sd_bus_prop_adapter(sd_bus *bus,
- 	                const char *path,
- 	                const char *interface,
- 	                const char *property,
- 	                sd_bus_message *value,
- 	                void *userdata,
- 	                sd_bus_error *ret_error)
+#if LOG_LEVEL >= LOG_LEVEL_DEBUG
+static inline std::string ibus_caps_to_str(uint32_t caps)
 {
-    return (static_cast<T *>(userdata)->*mf)(bus, path, interface, property, value, ret_error);
-}
+    std::ostringstream ss;
+    if (caps & IBUS_CAP_PREEDIT_TEXT) {
+        ss << "preedit-text|";
+    }
+    if (caps & IBUS_CAP_AUXILIARY_TEXT) {
+        ss << "aux-text|";
+    }
+    if (caps & IBUS_CAP_LOOKUP_TABLE) {
+        ss << "lookup-table|";
+    }
+    if (caps & IBUS_CAP_FOCUS) {
+        ss << "focus|";
+    }
+    if (caps & IBUS_CAP_PROPERTY) {
+        ss << "property|";
+    }
+    if (caps & IBUS_CAP_SURROUNDING_TEXT) {
+        ss << "surrounding-text|";
+    }
 
-//static inline uint16_t
-//scim_ibus_keystate_to_scim (uint32_t state)
-//{
-//    uint16_t mask = 0;
-//
-//    // Check Meta mask first, because it's maybe a mask combination.
-//    if (state & IBUS_META_MASK) {
-//        mask |= scim::SCIM_KEY_MetaMask;
-//    }
-//
-//    if (state & IBUS_SHIFT_MASK) {
-//        mask |= scim::SCIM_KEY_ShiftMask;
-//    }
-//
-//    if (state & IBUS_LOCK_MASK) {
-//        mask |= scim::SCIM_KEY_CapsLockMask;
-//    }
-//
-//    if (state & IBUS_CONTROL_MASK) {
-//        mask |= scim::SCIM_KEY_ControlMask;
-//    }
-//
-//    if (state & IBUS_MOD1_MASK) {
-//        mask |= scim::SCIM_KEY_AltMask;
-//    }
-//
-//    if (state & IBUS_SUPER_MASK) {
-//        mask |= scim::SCIM_KEY_SuperMask;
-//    }
-//
-//    if (state & IBUS_HYPER_MASK) {
-//        mask |= scim::SCIM_KEY_HyperMask;
-//    }
-//
-//    if (state & IBUS_MOD2_MASK) {
-//        mask |= scim::SCIM_KEY_NumLockMask;
-//    }
-//
-//    return mask;
-//}
-//
-//static inline scim::KeyEvent
-//scim_ibus_keyevent_to_scim (uint32_t keyval, uint32_t keycode, uint32_t state)
-//{
-//    scim::KeyEvent  scimkey;
-////    KeySym          keysym;
-////    XKeyEvent       key = xkey;
-////    char            buf [32];
-//
-//    scimkey.code = keyval;
-//
-//    scimkey.mask = scim_ibus_keystate_to_scim (state);
-//
-//    if (state & IBUS_RELEASE_MASK) scimkey.mask |= scim::SCIM_KEY_ReleaseMask;
-//
-////    if (scimkey.code == SCIM_KEY_backslash) {
-////        int keysym_size = 0;
-////        KeySym *keysyms = XGetKeyboardMapping (display, xkey.keycode, 1, &keysym_size);
-////        if (keysyms != NULL) {
-////            if (keysyms[0] == XK_backslash &&
-////		(keysym_size > 1 && keysyms[1] == XK_underscore))
-////                scimkey.mask |= SCIM_KEY_QuirkKanaRoMask;
-////            XFree (keysyms);
-////        }
-////    }
-//
-//    return scimkey;
-//}
-//
-//#if LOG_LEVEL >= LOG_LEVEL_DEBUG
-//static inline std::string ibus_caps_to_str(uint32_t caps)
-//{
-//    std::ostringstream ss;
-//    if (caps & IBUS_CAP_PREEDIT_TEXT) {
-//        ss << "preedit-text|";
-//    }
-//    if (caps & IBUS_CAP_AUXILIARY_TEXT) {
-//        ss << "aux-text|";
-//    }
-//    if (caps & IBUS_CAP_LOOKUP_TABLE) {
-//        ss << "lookup-table|";
-//    }
-//    if (caps & IBUS_CAP_FOCUS) {
-//        ss << "focus|";
-//    }
-//    if (caps & IBUS_CAP_PROPERTY) {
-//        ss << "property|";
-//    }
-//    if (caps & IBUS_CAP_SURROUNDING_TEXT) {
-//        ss << "surrounding-text|";
-//    }
-//
-//    std::string s = ss.str();
-//    if (s.size() > 0) {
-//        s.resize(s.size() - 1);
-//    }
-//
-//    return s;
-//}
-//#else
-//#define ibus_caps_to_str(caps)
-//#endif
+    std::string s = ss.str();
+    if (s.size() > 0) {
+        s.resize(s.size() - 1);
+    }
+
+    return s;
+}
+#else
+#define ibus_caps_to_str(caps) (String())
+#endif
 
 #endif // _SCIM_IBUS_UTILS_H
 

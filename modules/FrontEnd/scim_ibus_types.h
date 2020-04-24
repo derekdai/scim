@@ -30,14 +30,6 @@
 #if !defined (__SCIM_IBUS_TYPES_H)
 #define __SCIM_IBUS_TYPES_H
 
-struct IBusRect
-{
-    int x;
-    int y;
-    int w;
-    int h;
-};
-
 class IBusInputContext;
 typedef scim::Pointer <IBusInputContext> IBusInputContextPointer;
 
