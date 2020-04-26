@@ -54,29 +54,29 @@ class IBusFrontEnd : public FrontEndBase
     /**
      * ::first = ibus id, ::second = instance id.
      */
-    typedef std::vector <std::pair <int, int> > IBusInstanceRepository;
-
-#if SCIM_USE_STL_EXT_HASH_MAP
-    typedef __gnu_cxx::hash_map <int, ClientInfo, __gnu_cxx::hash <int> >   IBusClientRepository;
-#elif SCIM_USE_STL_HASH_MAP
-    typedef std::hash_map <int, ClientInfo, std::hash <int> >               IBusClientRepository;
-#else
-    typedef std::map <int, ClientInfo>                                      IBusClientRepository;
-#endif
+//    typedef std::vector <std::pair <int, int> > IBusInstanceRepository;
+//
+//#if SCIM_USE_STL_EXT_HASH_MAP
+//    typedef __gnu_cxx::hash_map <int, ClientInfo, __gnu_cxx::hash <int> >   IBusClientRepository;
+//#elif SCIM_USE_STL_HASH_MAP
+//    typedef std::hash_map <int, ClientInfo, std::hash <int> >               IBusClientRepository;
+//#else
+//    typedef std::map <int, ClientInfo>                                      IBusClientRepository;
+//#endif
 
     typedef std::map <int, IBusCtx*>                                        IBusIDCtxMap;
 
     ConfigPointer           m_config;
 
-    SocketServer            m_socket_server;
-
-    Transaction             m_send_trans;
-    Transaction             m_receive_trans;
-    Transaction             m_temp_trans;
-
-    IBusInstanceRepository  m_socket_instance_repository;
-
-    IBusClientRepository    m_socket_client_repository;
+//    SocketServer            m_socket_server;
+//
+//    Transaction             m_send_trans;
+//    Transaction             m_receive_trans;
+//    Transaction             m_temp_trans;
+//
+//    IBusInstanceRepository  m_socket_instance_repository;
+//
+//    IBusClientRepository    m_socket_client_repository;
 
     FrontEndHotkeyMatcher   m_frontend_hotkey_matcher;
 
@@ -84,18 +84,18 @@ class IBusFrontEnd : public FrontEndBase
 
     bool                    m_stay;
 
-    bool                    m_config_readonly;
-
-    int                     m_socket_timeout;
+//    bool                    m_config_readonly;
+//
+//    int                     m_socket_timeout;
 
     // siid
     int                     m_current_instance;
 
-    int                     m_current_socket_client;
+//    int                     m_current_socket_client;
 
     IBusCtx                *m_current_ibus_ctx;
 
-    uint32                  m_current_socket_client_key;
+//    uint32                  m_current_socket_client_key;
 
     PanelClient             m_panel_client;
 
