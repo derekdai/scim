@@ -55,6 +55,7 @@ enum {
 #define log_func()                                log_trace("%s", __FUNCTION__)
 #define log_func_not_impl(...)                    ({ log_error("%s not implement yet", __FUNCTION__); return __VA_ARGS__; })
 #define log_func_incomplete(...)                  ({ log_error("%s implementation incomplete", __FUNCTION__); return __VA_ARGS__; })
+#define log_func_ignored(...)                     ({ log_trace("%s ignored", __FUNCTION__); return __VA_ARGS__; })
 
 #ifndef SD_BUS_METHOD_WITH_NAMES
 #define SD_BUS_METHOD_WITH_NAMES( member, signature, in_names, result, out_names, handler, flags) \

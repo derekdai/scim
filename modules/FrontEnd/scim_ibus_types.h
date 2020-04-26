@@ -216,6 +216,27 @@ typedef enum
   IBUS_INPUT_HINT_VERTICAL_WRITING    = 1 << 8
 } IBusInputHints;
 
+typedef enum {
+    IBUS_ATTR_TYPE_UNDERLINE    = 1,
+    IBUS_ATTR_TYPE_FOREGROUND   = 2,
+    IBUS_ATTR_TYPE_BACKGROUND   = 3,
+} IBusAttrType;
+
+typedef enum {
+    IBUS_ATTR_UNDERLINE_NONE    = 0,
+    IBUS_ATTR_UNDERLINE_SINGLE  = 1,
+    IBUS_ATTR_UNDERLINE_DOUBLE  = 2,
+    IBUS_ATTR_UNDERLINE_LOW     = 3,
+    IBUS_ATTR_UNDERLINE_ERROR   = 4,
+} IBusAttrUnderline;
+
+struct IBusAttribute {
+    uint32_t type;
+    uint32_t value;
+    uint32_t start_index;
+    uint32_t end_index;
+};
+
 #endif // __SCIM_IBUS_TYPES_H
 
 /*

@@ -133,6 +133,7 @@ struct IBusRect
 
 class IBusCtx
 {
+    String                      m_ibus_id;
     int                         m_id;
     int                         m_siid;
     uint32_t                    m_caps;
@@ -150,11 +151,13 @@ class IBusCtx
     static const sd_bus_vtable  m_service_vtbl[];
 
 public:
-    IBusCtx (const String &locale, int id, int siid);
+    IBusCtx (const String &owner, const String &locale, int id, int siid);
 
     ~IBusCtx();
 
     int init (sd_bus *bus, const char *path);
+
+    const String owner () const { return m_ibus_id; }
 
     int id () const { return m_id; }
 
@@ -568,24 +571,7 @@ IBusFrontEnd::hide_lookup_table (int siid)
 void
 IBusFrontEnd::update_preedit_caret (int siid, int caret)
 {
-    log_func_not_impl ();
-
-//    if (m_current_instance != id) {
-//        return;
-//    }
-//
-//    char path [IBUS_INPUTCONTEXT_OBJECT_PATH_BUF_SIZE];
-//    ctx_gen_object_path (id, path, sizeof (path));
-//
-//    int r;
-//    if ((r = sd_bus_emit_signal (m_bus,
-//                                 path,
-//                                 IBUS_INPUTCONTEXT_INTERFACE,
-//                                 "HideLookupTable",
-//                                 NULL)) < 0) {
-//        log_warn ("unabled to emit HideLookupTable signal: %s",
-//                  strerror (r));
-//    }
+    log_func_ignored ();
 
 //    if (m_current_instance == id) {
 //        m_send_trans.put_command (SCIM_TRANS_CMD_UPDATE_PREEDIT_CARET);
@@ -2125,7 +2111,10 @@ int IBusFrontEnd::portal_create_ctx(sd_bus_message *m)
 
     int r;
 
-    IBusCtx *ctx = new IBusCtx (locale, id, siid);
+    IBusCtx *ctx = new IBusCtx (sd_bus_message_get_sender (m),
+                                locale,
+                                id,
+                                siid);
     if ((r = ctx->init (m_bus, path))) {
         return r;
     }
@@ -2326,6 +2315,7 @@ int IBusFrontEnd::ctx_focus_in(IBusCtx *ctx, sd_bus_message *m)
 
     m_panel_client.prepare (ctx->id ());
     panel_req_focus_in (ctx);
+    start_ctx (ctx);
     m_panel_client.send ();
 
     m_current_instance = -1;
@@ -2339,13 +2329,18 @@ int IBusFrontEnd::ctx_focus_out(IBusCtx *ctx, sd_bus_message *m)
 {
     log_func ();
 
-    m_current_ibus_ctx = NULL;
-
     uint32 siid = ctx->siid ();
 
     m_current_instance = siid;
 
+    m_panel_client.prepare (ctx->id ());
+    stop_ctx (ctx);
+    m_panel_client.focus_out (ctx-> id());
+    m_panel_client.send ();
+
     focus_out (siid); 
+
+    m_current_ibus_ctx = NULL;
 
     m_current_instance = -1;
 
@@ -2537,7 +2532,7 @@ static int fill_signal (sd_bus_message *m, va_list args)
  */
 static int fill_commit_text_signal (sd_bus_message *m, va_list args)
 {
-    WideString &wstr = *va_arg (args, WideString *);
+    const WideString &wstr = *va_arg (args, const WideString *);
     String str = utf8_wcstombs (wstr);
 
     log_func ();
@@ -2561,6 +2556,54 @@ static int fill_forward_key_event_signal (sd_bus_message *m, va_list args)
     KeyEvent &event = *va_arg (args, KeyEvent *);
 
     log_func_not_impl (-ENOSYS);
+}
+
+static bool scim_attr_to_ibus_attr (const Attribute &src, IBusAttribute &dest)
+{
+    switch (src.get_type()) {
+        case SCIM_ATTR_DECORATE:
+            dest.type = IBUS_ATTR_TYPE_UNDERLINE;
+            switch (src.get_value ()) {
+                case SCIM_ATTR_DECORATE_UNDERLINE:
+                    dest.value = IBUS_ATTR_UNDERLINE_SINGLE;
+                case SCIM_ATTR_DECORATE_HIGHLIGHT:
+                    dest.value = IBUS_ATTR_UNDERLINE_DOUBLE;
+                case SCIM_ATTR_DECORATE_REVERSE:
+                    dest.value = IBUS_ATTR_UNDERLINE_ERROR;
+                default:
+                    return false;
+            }
+        case SCIM_ATTR_FOREGROUND:
+            dest.type = IBUS_ATTR_TYPE_FOREGROUND;
+            dest.value = src.get_value ();
+        case SCIM_ATTR_BACKGROUND:
+            dest.type = IBUS_ATTR_TYPE_BACKGROUND;
+            dest.value = src.get_value ();
+        default:
+            return false;
+    }
+
+    dest.start_index = src.get_start ();
+    dest.end_index = src.get_end ();
+
+    return true;
+}
+
+static int fill_attribute (sd_bus_message *m, const Attribute &scim_attr)
+{
+    IBusAttribute attr;
+    if (!scim_attr_to_ibus_attr (scim_attr, attr)) {
+        // useless attribute, skip
+        return 0;
+    }
+
+    return sd_bus_message_append (m,
+                                  "sa{sv}uuuu",
+                                  "IBusAttribute",
+                                  attr.type,
+                                  attr.value,
+                                  attr.start_index,
+                                  attr.end_index);
 }
 
 /**
@@ -2591,20 +2634,71 @@ static int fill_forward_key_event_signal (sd_bus_message *m, va_list args)
  * @b False
  * @u 0
  */
-static int fill_update_preedit_text_signal (sd_bus_message *m, va_list args)
+static int fill_text_signal (sd_bus_message *m, va_list args)
 {
     const WideString &wstr = *va_arg (args, const WideString *);
     const AttributeList &attrs = *va_arg (args, const AttributeList *);
+    String str = utf8_wcstombs (wstr);
 
-    log_func_not_impl (-ENOSYS);
-}
+    log_func ();
 
-static int fill_update_auxiliary_text_signal (sd_bus_message *m, va_list args)
-{
-    const WideString &wstr = *va_arg (args, const WideString *);
-    const AttributeList &attrs = *va_arg (args, const AttributeList *);
+    log_debug ("preedit text: '%s'", str.c_str());
 
-    log_func_not_impl (-ENOSYS);
+    int r;
+    if ((r = sd_bus_message_open_container (m, 'v', "(sa{sv}sv)")) < 0) {
+        return r;
+    }
+
+    if ((r = sd_bus_message_open_container (m, 'r', "sa{sv}sv")) < 0) {
+        return r;
+    }
+
+    if ((r = sd_bus_message_append (m,
+                                    "sa{sv}s",
+                                    "IBusText",
+                                    0,
+                                    str.c_str())) < 0) {
+        return r;
+    }
+
+    if ((r = sd_bus_message_open_container (m, 'v', "(sa{sv}av)")) < 0) {
+        return r;
+    }
+
+    if ((r = sd_bus_message_open_container (m, 'r', "sa{sv}av")) < 0) {
+        return r;
+    }
+
+    if ((r = sd_bus_message_append (m, "sa{sv}av", "IBusAttrList", 0, 0)) < 0) {
+        return r;
+    }
+
+    if ((r = sd_bus_message_open_container (m, 'a', "v")) < 0) {
+        return r;
+    }
+
+    if ((r = sd_bus_message_open_container (m, 'v', "(sa{sv}uuuu)")) < 0) {
+        return r;
+    }
+
+    if ((r = sd_bus_message_open_container (m, 'r', "sa{sv}uuuu")) < 0) {
+        return r;
+    }
+
+    AttributeList::const_iterator it = attrs.begin ();
+    for (; it != attrs.end(); it ++) {
+        if ((r = fill_attribute (m, *it)) < 0) {
+            return r;
+        }
+    }
+
+    for (int i = 0; i < 6; i ++) {
+        if ((r = sd_bus_message_close_container (m)) < 0) {
+            return r;
+        }
+    }
+
+    return r;
 }
 
 static int fill_update_lookup_table_signal (sd_bus_message *m, va_list args)
@@ -2643,15 +2737,12 @@ IBusFrontEnd::signal_ctx (int siid, const char *signal, ...) const
 
     int (*filler) (sd_bus_message *m, va_list args) = NULL;
 
-    if ("ShowPreditText" == signal) {
-        filler = &fill_commit_text_signal;
-    } else if ("ForwardKeyEvent" == signal) {
+    if ("ForwardKeyEvent" == signal) {
         filler = &fill_forward_key_event_signal;
     } else if ("UpdatePreeditText" == signal ||
-               "UpdatePreeditTextWithMode" == signal) {
-        filler = &fill_update_preedit_text_signal;
-    } else if ("UpdateAuxiliaryText" == signal) {
-        filler = &fill_update_auxiliary_text_signal;
+               "UpdatePreeditTextWithMode" == signal ||
+               "UpdateAuxiliaryText" == signal) {
+        filler = &fill_text_signal;
     } else if ("UpdateLookupTable" == signal) {
         filler = &fill_update_lookup_table_signal;
     } else if ("RegisterProperties" == signal) {
@@ -2660,7 +2751,7 @@ IBusFrontEnd::signal_ctx (int siid, const char *signal, ...) const
         filler = &fill_update_property_signal;
     } else if ("CommitText" == signal) {
         filler = &fill_commit_text_signal;
-    } else if ("ShowPreditText" == signal ||
+    } else if ("ShowPreeditText" == signal ||
                "HidePreeditText" == signal ||
                "ShowAuxiliaryText" == signal ||
                "HideAuxiliaryText" == signal ||
@@ -2694,7 +2785,11 @@ IBusFrontEnd::signal_ctx (int siid, const char *signal, ...) const
         return;
     }
 
-    log_trace ("emit %s => %s", signal, path);
+    if ((r = sd_bus_message_set_destination (m, ctx->owner ().c_str ())) < 0) {
+        log_warn ("unable to set signal destination: %s", strerror (-r));
+    }
+
+    log_trace ("emit %s.%s => %s", path, signal, ctx->owner ().c_str());
 
     if ((r = sd_bus_send (m_bus, m, NULL)) < 0) {
         log_warn ("unabled to emit %s.%s: %s",
@@ -3235,8 +3330,9 @@ IBusFrontEnd::filter_hotkeys (IBusCtx *ctx, const KeyEvent &scimkey)
 //    return 0;
 //}
 
-IBusCtx::IBusCtx (const String &locale, int id, int siid)
-    : m_id (id),
+IBusCtx::IBusCtx (const String &owner, const String &locale, int id, int siid)
+    : m_ibus_id (owner),
+      m_id (id),
       m_siid (siid),
       m_caps (0),
       m_client_commit_preedit (true),
