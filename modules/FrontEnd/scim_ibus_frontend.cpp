@@ -2324,6 +2324,10 @@ int IBusFrontEnd::ctx_focus_in(IBusCtx *ctx, sd_bus_message *m)
 
     focus_in (siid); 
 
+    m_panel_client.prepare (ctx->id ());
+    panel_req_focus_in (ctx);
+    m_panel_client.send ();
+
     m_current_instance = -1;
 
     m_current_ibus_ctx = ctx;
@@ -2650,8 +2654,7 @@ IBusFrontEnd::signal_ctx (int siid, const char *signal, ...) const
         filler = &fill_update_auxiliary_text_signal;
     } else if ("UpdateLookupTable" == signal) {
         filler = &fill_update_lookup_table_signal;
-    } else if ("RegisterProperties" == signal ||
-               "UpdateProperty" == signal) {
+    } else if ("RegisterProperties" == signal) {
         filler = &fill_register_properties_signal;
     } else if ("UpdateProperty" == signal) {
         filler = &fill_update_property_signal;

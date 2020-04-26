@@ -287,6 +287,7 @@ private:
     void panel_req_show_help              (const IBusCtx *ctx);
     void panel_req_show_factory_menu      (const IBusCtx *ctx);
     void panel_req_focus_in               (const IBusCtx *ctx);
+    void panel_req_focus_out              (const IBusCtx *ctx);
     void panel_req_update_factory_info    (const IBusCtx *ctx);
     void panel_req_update_spot_location   (const IBusCtx *ctx);
 
