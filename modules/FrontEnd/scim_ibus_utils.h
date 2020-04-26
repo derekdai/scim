@@ -29,37 +29,35 @@
 #if !defined (__SCIM_IBUS_UTILS_H)
 #define __SCIM_IBUS_UTILS_H
 
-enum {
-    LOG_LEVEL_TRACE,
-    LOG_LEVEL_DEBUG,
-    LOG_LEVEL_INFO,
-    LOG_LEVEL_WARN,
-    LOG_LEVEL_ERROR,
-    LOG_LEVEL_FATAL,
-};
-#define LOG_LEVEL LOG_LEVEL_TRACE
-#define log_level_enabled(l) ((l) >= LOG_LEVEL)
-#define log_print(level, fmt, ...) ({                                                               \
+#define LOG_LEVEL_TRACE             1
+#define LOG_LEVEL_DEBUG             2
+#define LOG_LEVEL_INFO              3
+#define LOG_LEVEL_WARN              4
+#define LOG_LEVEL_ERROR             5
+#define LOG_LEVEL_FATAL             6
+#define LOG_LEVEL                   LOG_LEVEL_TRACE
+#define log_level_enabled(l)        ((l) >= LOG_LEVEL)
+#define log_print(level, fmt, ...)  ({                                                              \
     int l = (level);                                                                                \
     if (log_level_enabled(l)) {                                                                     \
         static const char *names[] = { "TRC", "DBG", "INF", "WRN", "ERR", "FAL" };                  \
         fprintf(stderr, "%s " __FILE__ ":%-4d " fmt "\n", names[(l)], __LINE__, ##__VA_ARGS__);     \
     }                                                                                               \
 })
-#define log_trace(fmt, ...)                       log_print(LOG_LEVEL_TRACE, fmt, ##__VA_ARGS__)
-#define log_debug(fmt, ...)                       log_print(LOG_LEVEL_DEBUG, fmt, ##__VA_ARGS__)
-#define log_info(fmt, ...)                        log_print(LOG_LEVEL_INFO, fmt, ##__VA_ARGS__)
-#define log_warn(fmt, ...)                        log_print(LOG_LEVEL_WARN, fmt, ##__VA_ARGS__)
-#define log_error(fmt, ...)                       log_print(LOG_LEVEL_ERROR, fmt, ##__VA_ARGS__)
-#define log_fatal(fmt, ...)                       log_print(LOG_LEVEL_FATAL, fmt, ##__VA_ARGS__)
-#define log_func()                                log_trace("%s", __FUNCTION__)
-#define log_func_not_impl(...)                    ({ log_error("%s not implement yet", __FUNCTION__); return __VA_ARGS__; })
-#define log_func_incomplete(...)                  ({ log_error("%s implementation incomplete", __FUNCTION__); return __VA_ARGS__; })
-#define log_func_ignored(...)                     ({ log_trace("%s ignored", __FUNCTION__); return __VA_ARGS__; })
+#define log_trace(fmt, ...)          log_print(LOG_LEVEL_TRACE, fmt, ##__VA_ARGS__)
+#define log_debug(fmt, ...)          log_print(LOG_LEVEL_DEBUG, fmt, ##__VA_ARGS__)
+#define log_info(fmt, ...)           log_print(LOG_LEVEL_INFO, fmt, ##__VA_ARGS__)
+#define log_warn(fmt, ...)           log_print(LOG_LEVEL_WARN, fmt, ##__VA_ARGS__)
+#define log_error(fmt, ...)          log_print(LOG_LEVEL_ERROR, fmt, ##__VA_ARGS__)
+#define log_fatal(fmt, ...)          log_print(LOG_LEVEL_FATAL, fmt, ##__VA_ARGS__)
+#define log_func()                   log_trace("%s", __FUNCTION__)
+#define log_func_not_impl(...)       ({ log_error("%s not implement yet", __FUNCTION__); return __VA_ARGS__; })
+#define log_func_incomplete(...)     ({ log_error("%s implementation incomplete", __FUNCTION__); return __VA_ARGS__; })
+#define log_func_ignored(...)        ({ log_trace("%s ignored", __FUNCTION__); return __VA_ARGS__; })
 
 #ifndef SD_BUS_METHOD_WITH_NAMES
-#define SD_BUS_METHOD_WITH_NAMES( member, signature, in_names, result, out_names, handler, flags) \
-    SD_BUS_METHOD( member, signature, result, handler, flags)
+#define SD_BUS_METHOD_WITH_NAMES(member, signature, in_names, result, out_names, handler, flags) \
+    SD_BUS_METHOD(member, signature, result, handler, flags)
 #endif
 
 #ifndef SD_BUS_PARAM
@@ -108,6 +106,50 @@ scim_ibus_keystate_to_scim_keymask (uint32_t state)
     }
 
     return mask;
+}
+
+static inline uint16_t
+scim_keymask_to_ibus_keystate (uint32_t mask)
+{
+    uint16_t state = 0;
+
+    if (mask & SCIM_KEY_ShiftMask) {
+        mask |= IBUS_SHIFT_MASK;
+    }
+
+    if (mask & SCIM_KEY_CapsLockMask) {
+        mask |= IBUS_LOCK_MASK;
+    }
+
+    if (mask & SCIM_KEY_ControlMask) {
+        mask |= IBUS_CONTROL_MASK;
+    }
+
+    if (mask & SCIM_KEY_AltMask) {
+        mask |= IBUS_MOD1_MASK;
+    }
+
+    if (mask & SCIM_KEY_MetaMask) {
+        mask |= IBUS_MOD2_MASK;
+    }
+
+    if (mask & SCIM_KEY_SuperMask) {
+        mask |= IBUS_SUPER_MASK;
+    }
+
+    if (mask & SCIM_KEY_HyperMask) {
+        mask |= IBUS_HYPER_MASK;
+    }
+
+    if (mask & SCIM_KEY_NumLockMask) {
+        mask |= IBUS_MOD5_MASK;
+    }
+
+    if (mask & SCIM_KEY_ReleaseMask) {
+        mask |= IBUS_RELEASE_MASK;
+    }
+
+    return state;
 }
 
 static inline std::string
@@ -168,6 +210,37 @@ scim_ibus_keyevent_to_scim_keyevent (KeyboardLayout layout,
 //            XFree (keysyms);
 //        }
 //    }
+}
+
+static bool scim_attr_to_ibus_attr (const Attribute &src, IBusAttribute &dest)
+{
+    switch (src.get_type()) {
+        case SCIM_ATTR_DECORATE:
+            dest.type = IBUS_ATTR_TYPE_UNDERLINE;
+            switch (src.get_value ()) {
+                case SCIM_ATTR_DECORATE_UNDERLINE:
+                    dest.value = IBUS_ATTR_UNDERLINE_SINGLE;
+                case SCIM_ATTR_DECORATE_HIGHLIGHT:
+                    dest.value = IBUS_ATTR_UNDERLINE_DOUBLE;
+                case SCIM_ATTR_DECORATE_REVERSE:
+                    dest.value = IBUS_ATTR_UNDERLINE_ERROR;
+                default:
+                    return false;
+            }
+        case SCIM_ATTR_FOREGROUND:
+            dest.type = IBUS_ATTR_TYPE_FOREGROUND;
+            dest.value = src.get_value ();
+        case SCIM_ATTR_BACKGROUND:
+            dest.type = IBUS_ATTR_TYPE_BACKGROUND;
+            dest.value = src.get_value ();
+        default:
+            return false;
+    }
+
+    dest.start_index = src.get_start ();
+    dest.end_index = src.get_end ();
+
+    return true;
 }
 
 #if LOG_LEVEL >= LOG_LEVEL_DEBUG

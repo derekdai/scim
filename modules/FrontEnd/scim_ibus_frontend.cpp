@@ -196,8 +196,8 @@ public:
     void off() { m_on = false; }
 };
 
-static void free_strv (char **strv);
-static void free_strvp (char ***strv);
+static inline void free_strv (char **strv);
+static inline void free_strvp (char ***strv);
 
 template<int (IBusFrontEnd::*mf)(sd_bus_message *m)>
 static int portal_message_adapter (sd_bus_message *m,
@@ -2086,7 +2086,8 @@ IBusFrontEnd::reload_config_callback (const ConfigPointer &config)
 /**
  * IBusFrontEnd::ibus_new_instance
  */
-int IBusFrontEnd::portal_create_ctx(sd_bus_message *m)
+int
+IBusFrontEnd::portal_create_ctx(sd_bus_message *m)
 {
     log_func();
 
@@ -2135,7 +2136,8 @@ int IBusFrontEnd::portal_create_ctx(sd_bus_message *m)
     return r;
 }
 
-int IBusFrontEnd::srv_destroy(IBusCtx *ctx, sd_bus_message *m)
+int
+IBusFrontEnd::srv_destroy(IBusCtx *ctx, sd_bus_message *m)
 {
     log_func_not_impl (-ENOSYS);
 
@@ -2172,7 +2174,8 @@ int IBusFrontEnd::srv_destroy(IBusCtx *ctx, sd_bus_message *m)
 //    m_current_socket_client_key = 0;
 }
 
-int IBusFrontEnd::ctx_process_key_event(IBusCtx *ctx, sd_bus_message *m)
+int
+IBusFrontEnd::ctx_process_key_event(IBusCtx *ctx, sd_bus_message *m)
 {
     log_func ();
 
@@ -2198,6 +2201,10 @@ int IBusFrontEnd::ctx_process_key_event(IBusCtx *ctx, sd_bus_message *m)
                     : ctx->is_on() && process_key_event (siid, event)
                         ? true
                         : false;
+    if (!consumed) {
+        signal_ctx (siid, "ForwardKeyEvent", &event);
+    }
+
 //    else {
 //        //IMForwardEvent (ims, (XPointer) call_data);
 //    }
@@ -2240,7 +2247,8 @@ int IBusFrontEnd::ctx_process_key_event(IBusCtx *ctx, sd_bus_message *m)
  * @i 0
  * @i 18
  */
-int IBusFrontEnd::ctx_set_cursor_location(IBusCtx *ctx, sd_bus_message *m)
+int
+IBusFrontEnd::ctx_set_cursor_location(IBusCtx *ctx, sd_bus_message *m)
 {
     log_func ();
 
@@ -2256,7 +2264,8 @@ int IBusFrontEnd::ctx_set_cursor_location(IBusCtx *ctx, sd_bus_message *m)
     return 0;
 }
 
-int IBusFrontEnd::ctx_set_cursor_location_relative(IBusCtx *ctx, sd_bus_message *m)
+int
+IBusFrontEnd::ctx_set_cursor_location_relative(IBusCtx *ctx, sd_bus_message *m)
 {
     log_func ();
 
@@ -2273,37 +2282,44 @@ int IBusFrontEnd::ctx_set_cursor_location_relative(IBusCtx *ctx, sd_bus_message 
 }
 
 
-int IBusFrontEnd::ctx_process_hand_writing_event(IBusCtx *ctx, sd_bus_message *m)
+int
+IBusFrontEnd::ctx_process_hand_writing_event(IBusCtx *ctx, sd_bus_message *m)
 {
     log_func_not_impl (-ENOSYS);
 }
 
-int IBusFrontEnd::ctx_cancel_hand_writing(IBusCtx *ctx, sd_bus_message *m)
+int
+IBusFrontEnd::ctx_cancel_hand_writing(IBusCtx *ctx, sd_bus_message *m)
 {
     log_func_not_impl (-ENOSYS);
 }
 
-int IBusFrontEnd::ctx_property_activate(IBusCtx *ctx, sd_bus_message *m)
+int
+IBusFrontEnd::ctx_property_activate(IBusCtx *ctx, sd_bus_message *m)
 {
     log_func_not_impl (-ENOSYS);
 }
 
-int IBusFrontEnd::ctx_set_engine(IBusCtx *ctx, sd_bus_message *m)
+int
+IBusFrontEnd::ctx_set_engine(IBusCtx *ctx, sd_bus_message *m)
 {
     log_func_not_impl (-ENOSYS);
 }
 
-int IBusFrontEnd::ctx_get_engine(IBusCtx *ctx, sd_bus_message *m)
+int
+IBusFrontEnd::ctx_get_engine(IBusCtx *ctx, sd_bus_message *m)
 {
     log_func_not_impl (-ENOSYS);
 }
 
-int IBusFrontEnd::ctx_set_surrounding_text(IBusCtx *ctx, sd_bus_message *m)
+int
+IBusFrontEnd::ctx_set_surrounding_text(IBusCtx *ctx, sd_bus_message *m)
 {
     log_func_not_impl (-ENOSYS);
 }
 
-int IBusFrontEnd::ctx_focus_in(IBusCtx *ctx, sd_bus_message *m)
+int
+IBusFrontEnd::ctx_focus_in(IBusCtx *ctx, sd_bus_message *m)
 {
     log_func ();
 
@@ -2325,7 +2341,8 @@ int IBusFrontEnd::ctx_focus_in(IBusCtx *ctx, sd_bus_message *m)
     return 0;
 }
 
-int IBusFrontEnd::ctx_focus_out(IBusCtx *ctx, sd_bus_message *m)
+int
+IBusFrontEnd::ctx_focus_out(IBusCtx *ctx, sd_bus_message *m)
 {
     log_func ();
 
@@ -2347,7 +2364,8 @@ int IBusFrontEnd::ctx_focus_out(IBusCtx *ctx, sd_bus_message *m)
     return 0;
 }
 
-int IBusFrontEnd::ctx_reset(IBusCtx *ctx, sd_bus_message *m)
+int
+IBusFrontEnd::ctx_reset(IBusCtx *ctx, sd_bus_message *m)
 {
     log_func ();
 
@@ -2365,7 +2383,8 @@ int IBusFrontEnd::ctx_reset(IBusCtx *ctx, sd_bus_message *m)
 /**
  * IBusFrontEnd::ibus_update_client_capabilities
  */
-int IBusFrontEnd::ctx_set_capabilities(IBusCtx *ctx, sd_bus_message *m)
+int
+IBusFrontEnd::ctx_set_capabilities(IBusCtx *ctx, sd_bus_message *m)
 {
     log_func ();
 
@@ -2389,35 +2408,40 @@ int IBusFrontEnd::ctx_set_capabilities(IBusCtx *ctx, sd_bus_message *m)
     return r;
 }
 
-int IBusFrontEnd::ctx_get_client_commit_preedit (IBusCtx *ctx, sd_bus_message *value)
+int
+IBusFrontEnd::ctx_get_client_commit_preedit (IBusCtx *ctx, sd_bus_message *value)
 {
     log_func ();
 
     return ctx->client_commit_preedit_to_message (value);
 }
 
-int IBusFrontEnd::ctx_set_client_commit_preedit (IBusCtx *ctx, sd_bus_message *value)
+int
+IBusFrontEnd::ctx_set_client_commit_preedit (IBusCtx *ctx, sd_bus_message *value)
 {
     log_func ();
 
     return ctx->client_commit_preedit_from_message (value);
 }
 
-int IBusFrontEnd::ctx_get_content_type (IBusCtx *ctx, sd_bus_message *value)
+int
+IBusFrontEnd::ctx_get_content_type (IBusCtx *ctx, sd_bus_message *value)
 {
     log_func ();
 
     return ctx->content_type_to_message (value);
 }
 
-int IBusFrontEnd::ctx_set_content_type (IBusCtx *ctx, sd_bus_message *value)
+int
+IBusFrontEnd::ctx_set_content_type (IBusCtx *ctx, sd_bus_message *value)
 {
     log_func ();
 
     return ctx->content_type_from_message (value);
 }
 
-IBusCtx *IBusFrontEnd::find_ctx_by_siid (int siid) const
+IBusCtx *
+IBusFrontEnd::find_ctx_by_siid (int siid) const
 {
     IBusIDCtxMap::const_iterator it = m_siid_ctx_map.find (siid);
     if (it == m_siid_ctx_map.end ()) {
@@ -2427,7 +2451,8 @@ IBusCtx *IBusFrontEnd::find_ctx_by_siid (int siid) const
     return it->second;
 }
 
-IBusCtx *IBusFrontEnd::find_ctx (int id) const
+IBusCtx *
+IBusFrontEnd::find_ctx (int id) const
 {
     IBusIDCtxMap::const_iterator it = m_id_ctx_map.find (id);
     if (it == m_id_ctx_map.end ()) {
@@ -2437,7 +2462,8 @@ IBusCtx *IBusFrontEnd::find_ctx (int id) const
     return it->second;
 }
 
-IBusCtx *IBusFrontEnd::find_ctx (const char *path) const
+IBusCtx *
+IBusFrontEnd::find_ctx (const char *path) const
 {
     if (strncmp (IBUS_INPUTCONTEXT_OBJECT_PATH,
                  path,
@@ -2460,12 +2486,14 @@ IBusCtx *IBusFrontEnd::find_ctx (const char *path) const
     return _scim_frontend->find_ctx (id);
 }
 
-inline bool IBusFrontEnd::validate_ctx (IBusCtx *ctx) const {
+inline bool
+IBusFrontEnd::validate_ctx (IBusCtx *ctx) const {
     return ctx != NULL &&
            m_id_ctx_map.find (ctx->id ()) != m_id_ctx_map.end ();
 }
 
-void IBusFrontEnd::start_ctx (IBusCtx *ctx)
+void
+IBusFrontEnd::start_ctx (IBusCtx *ctx)
 {
     log_func ();
 
@@ -2495,7 +2523,8 @@ void IBusFrontEnd::start_ctx (IBusCtx *ctx)
     }
 }
 
-void IBusFrontEnd::stop_ctx (IBusCtx *ctx)
+void
+IBusFrontEnd::stop_ctx (IBusCtx *ctx)
 {
     log_func ();
 
@@ -2522,7 +2551,8 @@ void IBusFrontEnd::stop_ctx (IBusCtx *ctx)
     }
 }
 
-static int fill_signal (sd_bus_message *m, va_list args)
+static int
+serialize_signal (sd_bus_message *m, va_list args)
 {
     return 0;
 }
@@ -2530,7 +2560,8 @@ static int fill_signal (sd_bus_message *m, va_list args)
 /**
  * @v <@(sa{sv}sv) ("IBusText", {}, "\20013\25991\23383", <@(sa{sv}av) ("IBusAttrList", {}, [])>)>
  */
-static int fill_commit_text_signal (sd_bus_message *m, va_list args)
+static int
+serialize_commit_text_signal (sd_bus_message *m, va_list args)
 {
     const WideString &wstr = *va_arg (args, const WideString *);
     String str = utf8_wcstombs (wstr);
@@ -2548,52 +2579,29 @@ static int fill_commit_text_signal (sd_bus_message *m, va_list args)
                                       "IBusAttrList",
                                       0,
                                       0);
-
 }
 
-static int fill_forward_key_event_signal (sd_bus_message *m, va_list args)
+static int
+serialize_forward_key_event_signal (sd_bus_message *m, va_list args)
 {
     KeyEvent &event = *va_arg (args, KeyEvent *);
 
-    log_func_not_impl (-ENOSYS);
+    log_func ();
+
+    // TODO find out how to get keycode from KeyEvent
+    return sd_bus_message_append (m, "uuu",
+                                  event.code,   // keyval
+                                  0,            // keycode
+                                  scim_keymask_to_ibus_keystate (event.mask) |
+                                      IBUS_FORWARD_MASK);
 }
 
-static bool scim_attr_to_ibus_attr (const Attribute &src, IBusAttribute &dest)
-{
-    switch (src.get_type()) {
-        case SCIM_ATTR_DECORATE:
-            dest.type = IBUS_ATTR_TYPE_UNDERLINE;
-            switch (src.get_value ()) {
-                case SCIM_ATTR_DECORATE_UNDERLINE:
-                    dest.value = IBUS_ATTR_UNDERLINE_SINGLE;
-                case SCIM_ATTR_DECORATE_HIGHLIGHT:
-                    dest.value = IBUS_ATTR_UNDERLINE_DOUBLE;
-                case SCIM_ATTR_DECORATE_REVERSE:
-                    dest.value = IBUS_ATTR_UNDERLINE_ERROR;
-                default:
-                    return false;
-            }
-        case SCIM_ATTR_FOREGROUND:
-            dest.type = IBUS_ATTR_TYPE_FOREGROUND;
-            dest.value = src.get_value ();
-        case SCIM_ATTR_BACKGROUND:
-            dest.type = IBUS_ATTR_TYPE_BACKGROUND;
-            dest.value = src.get_value ();
-        default:
-            return false;
-    }
-
-    dest.start_index = src.get_start ();
-    dest.end_index = src.get_end ();
-
-    return true;
-}
-
-static int fill_attribute (sd_bus_message *m, const Attribute &scim_attr)
+static int
+serialize_attribute (sd_bus_message *m, const Attribute &scim_attr)
 {
     IBusAttribute attr;
     if (!scim_attr_to_ibus_attr (scim_attr, attr)) {
-        // useless attribute, skip
+        // useless or unmappable attribute, skip
         return 0;
     }
 
@@ -2604,6 +2612,49 @@ static int fill_attribute (sd_bus_message *m, const Attribute &scim_attr)
                                   attr.value,
                                   attr.start_index,
                                   attr.end_index);
+}
+
+static int
+serialize_attribute_list (sd_bus_message *m,
+                                     const AttributeList &attrs)
+{
+    log_func ();
+
+    int r;
+    if ((r = sd_bus_message_open_container (m, 'r', "sa{sv}av")) < 0) {
+        return r;
+    }
+
+    if ((r = sd_bus_message_append (m, "sa{sv}av", "IBusAttrList", 0, 0)) < 0) {
+        return r;
+    }
+
+    if ((r = sd_bus_message_open_container (m, 'a', "v")) < 0) {
+        return r;
+    }
+
+    if ((r = sd_bus_message_open_container (m, 'v', "(sa{sv}uuuu)")) < 0) {
+        return r;
+    }
+
+    if ((r = sd_bus_message_open_container (m, 'r', "sa{sv}uuuu")) < 0) {
+        return r;
+    }
+
+    AttributeList::const_iterator it = attrs.begin ();
+    for (; it != attrs.end(); it ++) {
+        if ((r = serialize_attribute (m, *it)) < 0) {
+            return r;
+        }
+    }
+
+    for (int i = 0; i < 4; i ++) {
+        if ((r = sd_bus_message_close_container (m)) < 0) {
+            return r;
+        }
+    }
+
+    return r;
 }
 
 /**
@@ -2634,7 +2685,8 @@ static int fill_attribute (sd_bus_message *m, const Attribute &scim_attr)
  * @b False
  * @u 0
  */
-static int fill_text_signal (sd_bus_message *m, va_list args)
+static int
+serialize_text_signal (sd_bus_message *m, va_list args)
 {
     const WideString &wstr = *va_arg (args, const WideString *);
     const AttributeList &attrs = *va_arg (args, const AttributeList *);
@@ -2665,34 +2717,11 @@ static int fill_text_signal (sd_bus_message *m, va_list args)
         return r;
     }
 
-    if ((r = sd_bus_message_open_container (m, 'r', "sa{sv}av")) < 0) {
+    if ((r = serialize_attribute_list(m, attrs)) < 0) {
         return r;
     }
 
-    if ((r = sd_bus_message_append (m, "sa{sv}av", "IBusAttrList", 0, 0)) < 0) {
-        return r;
-    }
-
-    if ((r = sd_bus_message_open_container (m, 'a', "v")) < 0) {
-        return r;
-    }
-
-    if ((r = sd_bus_message_open_container (m, 'v', "(sa{sv}uuuu)")) < 0) {
-        return r;
-    }
-
-    if ((r = sd_bus_message_open_container (m, 'r', "sa{sv}uuuu")) < 0) {
-        return r;
-    }
-
-    AttributeList::const_iterator it = attrs.begin ();
-    for (; it != attrs.end(); it ++) {
-        if ((r = fill_attribute (m, *it)) < 0) {
-            return r;
-        }
-    }
-
-    for (int i = 0; i < 6; i ++) {
+    for (int i = 0; i < 3; i ++) {
         if ((r = sd_bus_message_close_container (m)) < 0) {
             return r;
         }
@@ -2701,25 +2730,102 @@ static int fill_text_signal (sd_bus_message *m, va_list args)
     return r;
 }
 
-static int fill_update_lookup_table_signal (sd_bus_message *m, va_list args)
+static int
+serialize_update_lookup_table_signal (sd_bus_message *m, va_list args)
 {
     const LookupTable &table = *va_arg (args, const LookupTable *);
 
     log_func_not_impl (-ENOSYS);
 }
 
-static int fill_register_properties_signal (sd_bus_message *m, va_list args)
+static int
+serialize_property (sd_bus_message *m, const Property &prop)
 {
-    const PropertyList &properties = *va_arg (args, const PropertyList *);
+    int r;
+    if ((r = sd_bus_message_open_container (m, 'v', "(suvsvbbuvv)")) < 0) {
+        return r;
+    }
 
-    log_func_not_impl (-ENOSYS);
+    // TODO fix mappings of type, visible, state
+    r = sd_bus_message_append (m, "(suvsvbbuvv)",
+                               prop.get_key ().c_str (),            // key
+                               PROP_TYPE_NORMAL,                    // type
+                               "(sa{sv}sv)",                        // label, a IBusText
+                                   "IBusText",
+                                   0,
+                                   prop.get_label ().c_str (),
+                                   "(sa{sv}av)",
+                                       "IBusAttrList",
+                                       0,
+                                       0,
+                               prop.get_icon ().c_str (),            // icon
+                               "(sa{sv}sv)",                         // tooltip, a IBusText
+                                   "IBusText",
+                                   0,
+                                   prop.get_tip ().c_str (),
+                                   "(sa{sv}av)",
+                                       "IBusAttrList",
+                                       0,
+                                       0,
+                               false,                                // sensitive
+                               false,                                // visible
+                               0,                                    // state
+                               "av",                                 // sub_props
+                                   0,
+                               "(sa{sv}sv)",                         // symbol, a IBusText
+                                   "IBusText",
+                                   0,
+                                   prop.get_tip ().c_str (),
+                                   "(sa{sv}av)",
+                                       "IBusAttrList",
+                                       0,
+                                       0,
+                               "");
+    if (r < 0) {
+        return r;
+    }
+
+    return sd_bus_message_close_container (m);
 }
 
-static int fill_update_property_signal (sd_bus_message *m, va_list args)
+static int
+serialize_register_properties_signal (sd_bus_message *m, va_list args)
 {
-    const Property &property = *va_arg (args, const Property *);
+    const PropertyList &props = *va_arg (args, const PropertyList *);
 
-    log_func_not_impl (-ENOSYS);
+    log_func ();
+
+    int r;
+    if ((r = sd_bus_message_open_container (m, 'v', "av")) < 0) {
+        return r;
+    }
+
+    if ((r = sd_bus_message_open_container (m, 'a', "v")) < 0) {
+        return r;
+    }
+
+    PropertyList::const_iterator it = props.begin ();
+    for (; it != props.end (); it ++) {
+        if ((r = serialize_property (m, *it)) < 0) {
+            return r;
+        }
+    }
+
+    if ((r = sd_bus_message_close_container  (m)) < 0) {
+        return r;
+    }
+
+    return sd_bus_message_close_container (m);
+}
+
+static int
+serialize_update_property_signal (sd_bus_message *m, va_list args)
+{
+    const Property &prop = *va_arg (args, const Property *);
+
+    log_func ();
+
+    return serialize_property (m, prop);
 }
 
 void
@@ -2735,22 +2841,23 @@ IBusFrontEnd::signal_ctx (int siid, const char *signal, ...) const
     char path [IBUS_INPUTCONTEXT_OBJECT_PATH_BUF_SIZE];
     ctx_gen_object_path (ctx->id (), path, sizeof (path));
 
-    int (*filler) (sd_bus_message *m, va_list args) = NULL;
+    int (*serializer) (sd_bus_message *m, va_list args) = NULL;
 
+    // compare strings by interned address
     if ("ForwardKeyEvent" == signal) {
-        filler = &fill_forward_key_event_signal;
+        serializer = &serialize_forward_key_event_signal;
     } else if ("UpdatePreeditText" == signal ||
                "UpdatePreeditTextWithMode" == signal ||
                "UpdateAuxiliaryText" == signal) {
-        filler = &fill_text_signal;
+        serializer = &serialize_text_signal;
     } else if ("UpdateLookupTable" == signal) {
-        filler = &fill_update_lookup_table_signal;
+        serializer = &serialize_update_lookup_table_signal;
     } else if ("RegisterProperties" == signal) {
-        filler = &fill_register_properties_signal;
+        serializer = &serialize_register_properties_signal;
     } else if ("UpdateProperty" == signal) {
-        filler = &fill_update_property_signal;
+        serializer = &serialize_update_property_signal;
     } else if ("CommitText" == signal) {
-        filler = &fill_commit_text_signal;
+        serializer = &serialize_commit_text_signal;
     } else if ("ShowPreeditText" == signal ||
                "HidePreeditText" == signal ||
                "ShowAuxiliaryText" == signal ||
@@ -2761,7 +2868,7 @@ IBusFrontEnd::signal_ctx (int siid, const char *signal, ...) const
                "PageDownLookupTable" == signal ||
                "CursorUpLookupTableLookupTable" == signal ||
                "CursorDownLookupTableLookupTable" == signal) {
-        filler = fill_signal;
+        serializer = serialize_signal;
     } else {
         log_error ("unknown signal %s", signal);
         return;
@@ -2779,7 +2886,7 @@ IBusFrontEnd::signal_ctx (int siid, const char *signal, ...) const
 
     va_list args;
     va_start (args, signal);
-    if ((r = filler (m, args)) < 0) {
+    if ((r = serializer (m, args)) < 0) {
         log_warn ("error occured while appending signal arguments: %s",
                   strerror (-r));
         return;
@@ -2799,7 +2906,8 @@ IBusFrontEnd::signal_ctx (int siid, const char *signal, ...) const
     }
 }
 
-int IBusFrontEnd::panel_connect ()
+int
+IBusFrontEnd::panel_connect ()
 {
     log_func();
 
@@ -2825,7 +2933,8 @@ int IBusFrontEnd::panel_connect ()
     return r;
 }
 
-void IBusFrontEnd::panel_disconnect ()
+void
+IBusFrontEnd::panel_disconnect ()
 {
     log_func();
 
@@ -2965,7 +3074,7 @@ IBusFrontEnd::panel_slot_process_key_event (int context, const KeyEvent &key)
         if (!filter_hotkeys (ctx, key)) {
             if (!ctx->is_on () || !process_key_event (ctx->siid (), key)) {
 //                if (!m_fallback_instance->process_key_event (key))
-//                    ims_forward_key_event (ctx, key);
+                    signal_ctx (ctx->siid (), "ForwardKeyEvent", &key);
             }
         }
 
@@ -3381,7 +3490,7 @@ int IBusCtx::init (sd_bus *bus, const char *path)
 
 uint32_t IBusCtx::scim_caps () const
 {
-    uint32_t caps = 0;
+    uint32_t caps = SCIM_CLIENT_CAP_TRIGGER_PROPERTY;
 
     if (m_caps & IBUS_CAP_PREEDIT_TEXT) {
         caps |= SCIM_CLIENT_CAP_ONTHESPOT_PREEDIT;
@@ -3401,7 +3510,7 @@ uint32_t IBusCtx::scim_caps () const
 
     if (m_caps & IBUS_CAP_PROPERTY) {
         caps |= SCIM_CLIENT_CAP_SINGLE_LEVEL_PROPERTY |
-                SCIM_CLIENT_CAP_TRIGGER_PROPERTY;
+                SCIM_CLIENT_CAP_MULTI_LEVEL_PROPERTY;
     }
 
     if (m_caps & IBUS_CAP_SURROUNDING_TEXT) {
@@ -3472,14 +3581,14 @@ int IBusCtx::client_commit_preedit_to_message (sd_bus_message *v) const
     return sd_bus_message_close_container (v);
 }
 
-static void free_strvp (char ***strvp)
+static inline void free_strvp (char ***strvp)
 {
     if (*strvp) {
         free_strv (*strvp);
     }
 }
 
-static void free_strv (char **strv)
+static inline void free_strv (char **strv)
 {
     while (*strv) {
         free (*strv);

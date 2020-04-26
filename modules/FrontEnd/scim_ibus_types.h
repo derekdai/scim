@@ -237,6 +237,20 @@ struct IBusAttribute {
     uint32_t end_index;
 };
 
+typedef enum {
+    PROP_TYPE_NORMAL = 0,
+    PROP_TYPE_TOGGLE = 1,
+    PROP_TYPE_RADIO = 2,
+    PROP_TYPE_MENU = 3,
+    PROP_TYPE_SEPARATOR = 4,
+} IBusPropType;
+
+typedef enum {
+    PROP_STATE_UNCHECKED = 0,
+    PROP_STATE_CHECKED = 1,
+    PROP_STATE_INCONSISTENT = 2,
+} IBusPropState;
+
 #endif // __SCIM_IBUS_TYPES_H
 
 /*
