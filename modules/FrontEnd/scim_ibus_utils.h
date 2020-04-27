@@ -214,25 +214,35 @@ scim_ibus_keyevent_to_scim_keyevent (KeyboardLayout layout,
 
 static bool scim_attr_to_ibus_attr (const Attribute &src, IBusAttribute &dest)
 {
+    log_func ();
+
     switch (src.get_type()) {
         case SCIM_ATTR_DECORATE:
             dest.type = IBUS_ATTR_TYPE_UNDERLINE;
             switch (src.get_value ()) {
                 case SCIM_ATTR_DECORATE_UNDERLINE:
                     dest.value = IBUS_ATTR_UNDERLINE_SINGLE;
+                    break;
                 case SCIM_ATTR_DECORATE_HIGHLIGHT:
-                    dest.value = IBUS_ATTR_UNDERLINE_DOUBLE;
+//                    dest.value = IBUS_ATTR_UNDERLINE_DOUBLE;
+                    dest.type = IBUS_ATTR_TYPE_BACKGROUND;
+                    dest.value = 0xc8c8f0;
+                    break;
                 case SCIM_ATTR_DECORATE_REVERSE:
                     dest.value = IBUS_ATTR_UNDERLINE_ERROR;
+                    break;
                 default:
                     return false;
             }
+            break;
         case SCIM_ATTR_FOREGROUND:
             dest.type = IBUS_ATTR_TYPE_FOREGROUND;
             dest.value = src.get_value ();
+            break;
         case SCIM_ATTR_BACKGROUND:
             dest.type = IBUS_ATTR_TYPE_BACKGROUND;
             dest.value = src.get_value ();
+            break;
         default:
             return false;
     }
