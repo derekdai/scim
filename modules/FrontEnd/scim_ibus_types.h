@@ -147,6 +147,20 @@ typedef enum {
 } IBusPreeditFocusMode;
 
 /**
+ * IBusOrientation:
+ * @IBUS_ORIENTATION_HORIZONTAL: Horizontal orientation.
+ * @IBUS_ORIENTATION_VERTICAL: Vertival orientation.
+ * @IBUS_ORIENTATION_SYSTEM: Use ibus global orientation setup.
+ *
+ * Orientation of UI.
+ */
+typedef enum {
+    IBUS_ORIENTATION_HORIZONTAL = 0,
+    IBUS_ORIENTATION_VERTICAL   = 1,
+    IBUS_ORIENTATION_SYSTEM     = 2,
+} IBusOrientation;
+
+/**
  * IBusInputPurpose:
  * @IBUS_INPUT_PURPOSE_FREE_FORM: Allow any character
  * @IBUS_INPUT_PURPOSE_ALPHA: Allow only alphabetic characters

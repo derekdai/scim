@@ -49,7 +49,7 @@ endif
 noinst_HEADERS		= scim_x11_ic.h \
 		  	  scim_x11_frontend.h \
 			  scim_socket_frontend.h \
-			  scim_ibus_ic.h \
+			  scim_ibus_ctx.h \
 			  scim_ibus_utils.h \
 			  scim_ibus_types.h \
 			  scim_ibus_frontend.h
@@ -87,7 +87,8 @@ socket_la_LDFLAGS	= -avoid-version \
 
 socket_la_LIBADD	= $(top_builddir)/src/libscim@SCIM_EPOCH@.la
 
-ibus_la_SOURCES 	= scim_ibus_frontend.cpp
+ibus_la_SOURCES 	= scim_ibus_frontend.cpp \
+					  scim_ibus_ctx.cpp
 
 ibus_la_CFLAGS		= @SD_CFLAGS@ @X_CFLAGS@
 

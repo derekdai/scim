@@ -24,7 +24,7 @@
  * Free Software Foundation, Inc., 59 Temple Place, Suite 330,
  * Boston, MA  02111-1307  USA
  *
- * $Id: scim_ibus_frontend.h,v 1.26 2005/04/14 17:01:56 suzhe Exp $
+ * $Id: scim_ibus_frontend.h,v 1.26 2020/04/29 17:01:56 derekdai Exp $
  */
 
 #if !defined (__SCIM_IBUS_FRONTEND_H)
@@ -40,62 +40,19 @@ class IBusFrontEnd : public FrontEndBase
 {
     friend class IBusCtx;
 
-    enum ClientType {
-        UNKNOWN_CLIENT,
-        IMENGINE_CLIENT,
-        CONFIG_CLIENT
-    };
-
-    struct ClientInfo {
-        uint32     key;
-        ClientType type;
-    };
-
-    /**
-     * ::first = ibus id, ::second = instance id.
-     */
-//    typedef std::vector <std::pair <int, int> > IBusInstanceRepository;
-//
-//#if SCIM_USE_STL_EXT_HASH_MAP
-//    typedef __gnu_cxx::hash_map <int, ClientInfo, __gnu_cxx::hash <int> >   IBusClientRepository;
-//#elif SCIM_USE_STL_HASH_MAP
-//    typedef std::hash_map <int, ClientInfo, std::hash <int> >               IBusClientRepository;
-//#else
-//    typedef std::map <int, ClientInfo>                                      IBusClientRepository;
-//#endif
-
     typedef std::map <int, IBusCtx*>                                        IBusIDCtxMap;
+    typedef std::set <IBusCtx*>                                             IBusCtxSet;
+    typedef std::map <std::string, IBusCtxSet>                              IBusNameCtxMap;
 
     ConfigPointer           m_config;
 
-//    SocketServer            m_socket_server;
-//
-//    Transaction             m_send_trans;
-//    Transaction             m_receive_trans;
-//    Transaction             m_temp_trans;
-//
-//    IBusInstanceRepository  m_socket_instance_repository;
-//
-//    IBusClientRepository    m_socket_client_repository;
-
     FrontEndHotkeyMatcher   m_frontend_hotkey_matcher;
-
     IMEngineHotkeyMatcher   m_imengine_hotkey_matcher;
-
-    bool                    m_stay;
-
-//    bool                    m_config_readonly;
-//
-//    int                     m_socket_timeout;
 
     // siid
     int                     m_current_instance;
 
-//    int                     m_current_socket_client;
-
     IBusCtx                *m_current_ibus_ctx;
-
-//    uint32                  m_current_socket_client_key;
 
     PanelClient             m_panel_client;
 
@@ -103,15 +60,17 @@ class IBusFrontEnd : public FrontEndBase
 
     IBusIDCtxMap            m_id_ctx_map;
     IBusIDCtxMap            m_siid_ctx_map;
+    IBusNameCtxMap          m_name_ctx_map;
 
     sd_event               *m_loop; 
     sd_bus                 *m_bus; 
     sd_bus_slot            *m_portal_slot;
-//    sd_bus_slot            *m_ctx_enum_slot;
-//    sd_bus_slot            *m_obj_mngr_slot;
+    sd_bus_slot            *m_match_slot;
     sd_event_source        *m_panel_source;
 
-    static const            sd_bus_vtable m_portal_vtbl[];
+    static const sd_bus_vtable  m_portal_vtbl[];
+    static const sd_bus_vtable  m_inputcontext_vtbl[];
+    static const sd_bus_vtable  m_service_vtbl[];
 
 public:
     IBusFrontEnd (const BackEndPointer &backend,
@@ -156,64 +115,10 @@ public:
     virtual void run ();
 
 private:
-//    uint32 generate_key () const;
     int generate_ctx_id ();
     bool is_current_ctx                   (const IBusCtx *ctx) const { return ctx == m_current_ibus_ctx; }
 
     bool check_client_connection          (const Socket &client) const;
-
-    void ibus_accept_callback             (SocketServer *server, const Socket &client);
-    void ibus_receive_callback            (SocketServer *server, const Socket &client);
-    void ibus_exception_callback          (SocketServer *server, const Socket &client);
-
-    bool ibus_open_connection             (SocketServer *server, const Socket &client);
-    void ibus_close_connection            (SocketServer *server, const Socket &client);
-    ClientInfo ibus_get_client_info       (const Socket &client);
-
-    // functions called by client
-    void ibus_get_factory_list            (int client_id);
-    void ibus_get_factory_name            (int client_id);
-    void ibus_get_factory_authors         (int client_id);
-    void ibus_get_factory_credits         (int client_id);
-    void ibus_get_factory_help            (int client_id);
-    void ibus_get_factory_locales         (int client_id);
-    void ibus_get_factory_icon_file       (int client_id);
-    void ibus_get_factory_language        (int client_id);
-
-    void ibus_new_instance                (int client_id);
-    void ibus_delete_instance             (int client_id);
-    void ibus_delete_all_instances        (int client_id);
-
-    void ibus_process_key_event           (int client_id);
-    void ibus_move_preedit_caret          (int client_id);
-    void ibus_select_candidate            (int client_id);
-    void ibus_update_lookup_table_page_size (int client_id);
-    void ibus_lookup_table_page_up        (int client_id);
-    void ibus_lookup_table_page_down      (int client_id);
-    void ibus_reset                       (int client_id);
-    void ibus_focus_in                    (int client_id);
-    void ibus_focus_out                   (int client_id);
-    void ibus_trigger_property            (int client_id);
-    void ibus_process_helper_event        (int client_id);
-    void ibus_update_client_capabilities  (int client_id);
-
-    void ibus_flush_config                (int client_id);
-    void ibus_erase_config                (int client_id);
-    void ibus_get_config_string           (int client_id);
-    void ibus_set_config_string           (int client_id);
-    void ibus_get_config_int              (int client_id);
-    void ibus_set_config_int              (int client_id);
-    void ibus_get_config_bool             (int client_id);
-    void ibus_set_config_bool             (int client_id);
-    void ibus_get_config_double           (int client_id);
-    void ibus_set_config_double           (int client_id);
-    void ibus_get_config_vector_string    (int client_id);
-    void ibus_set_config_vector_string    (int client_id);
-    void ibus_get_config_vector_int       (int client_id);
-    void ibus_set_config_vector_int       (int client_id);
-    void ibus_reload_config               (int client_id);
-
-    void ibus_load_file                   (int client_id);
 
     void reload_config_callback (const ConfigPointer &config);
 
@@ -238,6 +143,8 @@ private:
     int ctx_get_content_type              (IBusCtx *ctx, sd_bus_message *value);
     int ctx_set_content_type              (IBusCtx *ctx, sd_bus_message *value);
 
+    int client_destroy                    (sd_bus_message *m);
+
     IBusCtx *find_ctx_by_siid             (int siid) const;
     IBusCtx *find_ctx                     (int id) const;
     IBusCtx *find_ctx                     (const char *path) const;
@@ -249,17 +156,8 @@ private:
     void signal_ctx                       (int siid,
                                            const char *signal,
                                            ...) const;
-//    static int find_ctx                   (sd_bus *bus,
-//                                           const char *path,
-//                                           const char *interface,
-//                                           void *userdata,
-//                                           void **ret_found,
-//                                           sd_bus_error *ret_error);
-//    static int enum_ctx                   (sd_bus *bus,
-//                                           const char *prefix,
-//                                           void *userdata,
-//                                           char ***ret_nodes,
-//                                           sd_bus_error *ret_error);
+
+    void destroy_ctx                      (IBusCtx *ctx);
 
     int panel_connect                     ();
     void panel_disconnect                 ();

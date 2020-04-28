@@ -35,7 +35,6 @@
 #define LOG_LEVEL_WARN              4
 #define LOG_LEVEL_ERROR             5
 #define LOG_LEVEL_FATAL             6
-#define LOG_LEVEL                   LOG_LEVEL_TRACE
 #define log_level_enabled(l)        ((l) >= LOG_LEVEL)
 #define log_print(level, fmt, ...)  ({                                                              \
     int l = (level);                                                                                \
@@ -54,14 +53,22 @@
 #define log_func_not_impl(...)       ({ log_error("%s not implement yet", __FUNCTION__); return __VA_ARGS__; })
 #define log_func_incomplete(...)     ({ log_error("%s implementation incomplete", __FUNCTION__); return __VA_ARGS__; })
 #define log_func_ignored(...)        ({ log_trace("%s ignored", __FUNCTION__); return __VA_ARGS__; })
+#ifndef LOG_LEVEL
+#define LOG_LEVEL                   LOG_LEVEL_INFO
+#endif
 
 #ifndef SD_BUS_METHOD_WITH_NAMES
-#define SD_BUS_METHOD_WITH_NAMES(member, signature, in_names, result, out_names, handler, flags) \
-    SD_BUS_METHOD(member, signature, result, handler, flags)
+#define SD_BUS_METHOD_WITH_NAMES(_member, _signature, _in_names, _result, _out_names, _handler, _flags) \
+    SD_BUS_METHOD(_member, _signature, _result, _handler, _flags)
+#endif
+
+#ifndef SD_BUS_SIGNAL_WITH_NAMES
+#define SD_BUS_SIGNAL_WITH_NAMES(_member, _signature, _names, _flags) \
+    SD_BUS_SIGNAL(_member, _signature, _flags)
 #endif
 
 #ifndef SD_BUS_PARAM
-#define SD_BUS_PARAM(name)
+#define SD_BUS_PARAM(name) {}
 #endif
 
 static inline uint16_t
@@ -152,44 +159,6 @@ scim_keymask_to_ibus_keystate (uint32_t mask)
     return state;
 }
 
-static inline std::string
-scim_caps_to_str (uint32_t caps)
-{
-    std::ostringstream ss;
-
-    if (caps & SCIM_CLIENT_CAP_ONTHESPOT_PREEDIT)
-    {
-        ss << "onthespo-preedit|";
-    }
-    if (caps & SCIM_CLIENT_CAP_SINGLE_LEVEL_PROPERTY)
-    {
-        ss << "single-level-prop|";
-    }
-    if (caps & SCIM_CLIENT_CAP_MULTI_LEVEL_PROPERTY)
-    {
-        ss << "multi-level-prop|";
-    }
-    if (caps & SCIM_CLIENT_CAP_TRIGGER_PROPERTY)
-    {
-        ss << "trigger-prop|";
-    }
-    if (caps & SCIM_CLIENT_CAP_HELPER_MODULE)
-    {
-        ss << "helper-module|";
-    }
-    if (caps & SCIM_CLIENT_CAP_SURROUNDING_TEXT)
-    {
-        ss << "surrounding-text|";
-    }
-
-    std::string s = ss.str();
-    if (s.size() > 0) {
-        s.resize(s.size() - 1);
-    }
-
-    return s;
-}
-
 static inline scim::KeyEvent
 scim_ibus_keyevent_to_scim_keyevent (KeyboardLayout layout,
                                      uint32_t keyval,
@@ -253,7 +222,7 @@ static bool scim_attr_to_ibus_attr (const Attribute &src, IBusAttribute &dest)
     return true;
 }
 
-#if LOG_LEVEL >= LOG_LEVEL_DEBUG
+#if log_level_enabled(LOG_LEVEL_DEBUG)
 static inline std::string ibus_caps_to_str(uint32_t caps)
 {
     std::ostringstream ss;
@@ -283,8 +252,114 @@ static inline std::string ibus_caps_to_str(uint32_t caps)
 
     return s;
 }
+
+static const char *scim_attr_list_to_str (const AttributeList &attrs, char *buf, size_t buf_size)
+{
+    buf[0] = '\0';
+    char *p = buf;
+
+    AttributeList::const_iterator it = attrs.begin ();
+    for (; it != attrs.end (); ++ it) {
+        switch (it->get_type ()) {
+            case SCIM_ATTR_DECORATE:
+                p += snprintf (p, buf_size - (p - buf),
+                               "Attr{type=Decorate, decorate=%s, start=%d, end=%d}, ",
+                               it->get_value () == SCIM_ATTR_DECORATE_NONE
+                                   ? "None"
+                                   : it->get_value () == SCIM_ATTR_DECORATE_UNDERLINE
+                                       ? "Underline"
+                                       : it->get_value () == SCIM_ATTR_DECORATE_HIGHLIGHT
+                                           ? "Highlight"
+                                           : "Reverse",
+                               it->get_start (),
+                               it->get_end ());
+                break;
+            case SCIM_ATTR_FOREGROUND:
+                p += snprintf (p, buf_size - (p - buf),
+                               "Attr{type=Foreground, color=(%x,%x,%x), start=%d, end=%d}, ",
+                               SCIM_RGB_COLOR_RED(it->get_value ()),
+                               SCIM_RGB_COLOR_GREEN(it->get_value ()),
+                               SCIM_RGB_COLOR_BLUE(it->get_value ()),
+                               it->get_start (),
+                               it->get_end ());
+                break;
+            case SCIM_ATTR_BACKGROUND:
+                p += snprintf (p, buf_size - (p - buf),
+                               "Attr{type=Background, color=(%x,%x,%x), start=%d, end=%d}, ",
+                               SCIM_RGB_COLOR_RED(it->get_value ()),
+                               SCIM_RGB_COLOR_GREEN(it->get_value ()),
+                               SCIM_RGB_COLOR_BLUE(it->get_value ()),
+                               it->get_start (),
+                               it->get_end ());
+                break;
+        }
+    }
+
+    if (p - buf > 2) {
+        *(p - 2) = '\0';
+    }
+
+    return buf;
+}
+
+static inline std::string
+scim_caps_to_str (uint32_t caps)
+{
+    std::ostringstream ss;
+
+    if (caps & SCIM_CLIENT_CAP_ONTHESPOT_PREEDIT)
+    {
+        ss << "onthespo-preedit|";
+    }
+    if (caps & SCIM_CLIENT_CAP_SINGLE_LEVEL_PROPERTY)
+    {
+        ss << "single-level-prop|";
+    }
+    if (caps & SCIM_CLIENT_CAP_MULTI_LEVEL_PROPERTY)
+    {
+        ss << "multi-level-prop|";
+    }
+    if (caps & SCIM_CLIENT_CAP_TRIGGER_PROPERTY)
+    {
+        ss << "trigger-prop|";
+    }
+    if (caps & SCIM_CLIENT_CAP_HELPER_MODULE)
+    {
+        ss << "helper-module|";
+    }
+    if (caps & SCIM_CLIENT_CAP_SURROUNDING_TEXT)
+    {
+        ss << "surrounding-text|";
+    }
+
+    std::string s = ss.str();
+    if (s.size() > 0) {
+        s.resize(s.size() - 1);
+    }
+
+    return s;
+}
+
 #else
-#define ibus_caps_to_str(caps) (String())
+static inline std::string
+ibus_caps_to_str(uint32_t caps)
+{
+    return "";
+}
+
+static inline std::string
+scim_caps_to_str (uint32_t caps)
+{
+    return "";
+}
+
+static inline const char *
+scim_attr_list_to_str (const AttributeList &attrs,
+                                          char *buf,
+                                          size_t buf_size)
+{
+    return "";
+}
 #endif
 
 #endif // _SCIM_IBUS_UTILS_H

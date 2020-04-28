@@ -63,7 +63,12 @@ pkgconfig_DATA          = scim.pc \
 
 ACLOCAL_AMFLAGS = -I m4
 
-.PHONY: update-ChangeLog docs
+.PHONY: update-ChangeLog docs gen_dbus_service
+
+gen_dbus_service:
+	sed -e "s^SCIM_LIBEXECDIR^$(SCIM_LIBEXECDIR)^" $(top_srcdir)/org.freedesktop.portal.IBus.service.in >org.freedesktop.portal.IBus.service
+
+org.freedesktop.portal.IBus.service: gen_dbus_service
 
 update-ChangeLog:
 	/bin/sh $(top_srcdir)/svn2cl.sh --authors=$(top_srcdir)/developers -f $(top_srcdir)/ChangeLog
