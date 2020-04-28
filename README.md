@@ -1,3 +1,7 @@
+[![Build Status](https://travis-ci.com/derekdai/scim.svg?branch=ibus-portal-support)](https://travis-ci.com/derekdai/scim)
+
+Overview:
+=========
 Source-derived documentation for developers is provided separately, courtesy
 of doxygen.  Look for scim-doc-$(VERSION).tar.gz on our website for download
 or browse online at http://oss.leggewie.org/scim/
@@ -6,10 +10,12 @@ To compile scim from VCS, be sure to run the bootstrap script in the toplevel
 directory first.  To prepare a new tarball for release, adjust the values of
 the AC_INIT, SCIM_*_VERSION, SCIM_CURRENT and SCIM_REVISION variables in
 configure.ac as necessary.  Then run
+```
 "./bootstrap && ./configure && make dist && make docs".
+```
 
 The main program of SCIM is named scim. The usage of scim is:
-
+```
   scim [option]...
 
   The options are: 
@@ -21,6 +27,7 @@ The main program of SCIM is named scim. The usage of scim is:
     -d, --daemon          Run scim as a daemon.
     --no-socket           Do not try to start a SCIM SocketFrontEnd daemon.
     -h, --help            Show this help message.
+```
 
 By default, scim will use x11 frontend module and simple 
 config module if they are available, unless you specify the module names.
@@ -38,13 +45,13 @@ TIPS of X11 FrontEnd:
 
 TIPS of Socket FrontEnd, IMEngine and Config module:
 ==================================================
-
+<pre>
 *********** Notice ************
 From 1.0.0, scim will make use of SocketFrontEnd to construct a single user
 client/server input method environment automatically. Unless you use --no-socket
 option when starting scim.
 *******************************
-
+</pre>
 Socket FrontEnd/IMEngine/Config module is useless under X11 environment. It's only
 useful to work with GTK2 SCIM IM Module.
 
@@ -57,19 +64,22 @@ indicates that it's a unix/local socket. If you want to create a inet socket, us
 inet: prefix, e.g. inet:localhost:12345, 12345 is the port number.
 
 Use following command to start scim daemon to listen a socket:
-
+```
 $ scim -f socket -c simple -ne socket -d
+```
 
 To specify a different address, you can do:
-
+```
 $ SCIM_SOCKET_ADDRESS=inet:localhost:12345 scim -f socket -c simple -ne socket -d
+```
 
 the option "-ne socket" tells scim does not load Socket IMEngine IM module, because
 there is no Socket FrontEnd running yet.
 
 Then to use this scim to serve another scim, you can do like this:
-
+```
 $ SCIM_SOCKET_ADDRESS=inet:localhost:12345 scim -f x11 -c socket -e socket -d
+```
 
 (This command starts a SCIM X11 XIM server which only forward request between
 X11 and the previous started SCIM Socket FrontEnd.)
@@ -80,9 +90,10 @@ Socket IMEngine IM module. -c socket tells scim to load configuration from remot
 Socket FrontEnd instead of local config file.
 
 Or if you want to use GTK2 IM Module within a GTK2/GNOME2 application, you can:
-
+```
 $ export SCIM_SOCKET_ADDRESS=inet:localhost:12345
 $ testgtk
+```
 
 Then you can use SCIM directly within testgtk, by right clicking on an entry widget
 and selecting SCIM input method.
@@ -90,13 +101,14 @@ and selecting SCIM input method.
 By default, GTK2 SCIM IM Module will only use Socket IMEngine/Config modules, if
 you want to load other modules directly, you may set the environment variables,
 e.g.:
-
+```
 $ export GTK_IM_SCIM_CONFIG_MODULE=simple
 $ export GTK_IM_SCIM_IMENGINE_MODULES=table
+```
 
 In case you do not understand how Socket FrontEnd/IMEngine module work, here is a
 simple diagram to explain it:
-
+<pre>
 +--------+
 |IMEngine|
 |Mod 1   |--+
@@ -113,6 +125,7 @@ simple diagram to explain it:
 |IMEngine|  |
 |Mod n   |--+
 +--------+
+</pre>
 
 Then you see, IMEngine Modules 1 to n (like pinyin, table, rawcode etc.) with
 Socket FrontEnd together act as a socket daemon (like apache), Socket IMEngine
@@ -124,5 +137,5 @@ the same route.
 
 Have fun!
 
-James Su <suzhe@tsinghua.org.cn>
+James Su <suzhe@tsinghua.org.cn><br/>
 Rolf Leggewie <foss@rolf.leggewie.biz>

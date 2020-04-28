@@ -32,7 +32,7 @@ EXTRA_DIST		= config.rpath THANKS \
 			  intltool-merge.in \
 			  intltool-update.in
 
-AUTOMAKE_OPTIONS 	= gnu
+AUTOMAKE_OPTIONS 	= gnu foreign
 SUBDIRS 		= src utils modules configs po extras data docs tests
 
 MAINTAINERCLEANFILES 	= Makefile.in \

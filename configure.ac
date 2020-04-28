@@ -2,7 +2,6 @@
 AC_INIT([scim],[1.4.19],[https://github.com/scim-im/scim])
 AC_CONFIG_SRCDIR([src/scim.h])
 
-
 ###########################################################
 ##          Some definitions of Version macros.          ##
 ###########################################################
