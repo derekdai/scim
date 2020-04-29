@@ -64,4 +64,4 @@ src/scim_types.h
 stamp-h1
 .ccls-cache
 moc_*.cpp
-configure-dev
+org.freedesktop.portal.IBus.service

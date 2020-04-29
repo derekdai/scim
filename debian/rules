@@ -10,7 +10,7 @@ override_dh_autoreconf:
 	./bootstrap
 
 override_dh_auto_configure:
-	dh_auto_configure -- --enable-clutter-immodule
+	dh_auto_configure -- --enable-clutter-immodule --disable-qt4-immodule
 
 override_dh_auto_build:
 	$(MAKE) docs
@@ -28,8 +28,6 @@ override_dh_installdocs:
 override_dh_install-arch:
 	dh_install
 	sed -i -e 's/@DEB_HOST_MULTIARCH@/$(DEB_HOST_MULTIARCH)/g' debian/scim/etc/X11/xinit/xinput.d/scim-immodule
-	LD_LIBRARY_PATH=debian/libscim8v5/usr/lib/$(DEB_HOST_MULTIARCH):$(LD_LIBRARY_PATH) \
-		dh_gtkmodules -p scim-gtk-immodule
 
 override_dh_makeshlibs:
 	dh_makeshlibs -p libscim8v5 -V "libscim8v5 (>= 1.4)"

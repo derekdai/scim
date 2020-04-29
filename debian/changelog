@@ -1,3 +1,24 @@
+scim (1.4.19-0ubuntu1ppa1) unstable; urgency=medium
+
+  [ Derek Dai]
+  * build for Ubuntu
+
+ -- Derek Dai <daiderek@gmail.com>  Mon, 04 May 2020 08:56:47 +0800
+
+scim (1.4.19-1) unstable; urgency=medium
+
+  [ Derek Dai]
+  * re-structure README and rename to README.md
+  * README.md: add Travis CI build status badge
+  * control:
+    - add build time dependencies: libxcb-keysyms1-dev libqt5x11extras5-dev
+      qtbase5-private-dev libsystemd-dev
+  * add Qt5 client support
+  * remove Qt4 client support due to upsteam drop Qt4 maintainance
+  * add IBus portal support
+
+ -- Derek Dai <daiderek@gmail.com>  Thu, 29 Apr 2020 10:07:15 +0800
+
 scim (1.4.18-2) unstable; urgency=medium
 
   * copyright: update to 2018

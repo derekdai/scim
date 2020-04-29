@@ -41,11 +41,24 @@ MAINTAINERCLEANFILES 	= Makefile.in \
 			  config.h.in \
 			  $(AUX_DIST)
 
-DISTCLEANFILES		= scim.pc scim-gtkutils.pc intltool-extract intltool-merge intltool-update
+DISTCLEANFILES		= scim.pc \
+					  scim-gtkutils.pc \
+					  intltool-extract \
+					  intltool-merge \
+					  intltool-update \
+					  org.freedesktop.portal.IBus.service
 
 CLEANFILES		= *.bak *.tar.*
 
 ACLOCAL			= aclocal -I $(ac_aux_dir)
+
+dbussessionservicesdir            = @DBUS_SESSION_SERVICES_DIR@
+
+if SCIM_BUILD_FRONTEND_IBUS
+IBUS_PORTAL_SERVICE               = org.freedesktop.portal.IBus.service
+endif
+
+dbussessionservices_DATA          = $(IBUS_PORTAL_SERVICE)
 
 pkgconfigdir            = $(libdir)/pkgconfig
 
