@@ -33,8 +33,10 @@ fi
 
 qtimm_exists () {
 	# check if any immodule installed
-	for dir in /usr/lib/qt*/plugins/inputmethods /usr/lib/@DEB_HOST_MULTIARCH@/qt*/plugins/inputmethods; do
+	for dir in /usr/lib/qt*/plugins/inputmethods /usr/lib/@DEB_HOST_MULTIARCH@/qt*/plugins/inputmethods /usr/lib/qt*/plugins/platforminputcontext /usr/lib/@DEB_HOST_MULTIARCH@/qt*/plugins/platforminputcontext; do
 		if [ -r ${dir}/im-$1.so ]; then
+			 return 0
+		elif [ -r ${dir}/libscim*.so ]; then
 			 return 0
 		fi
 	done
