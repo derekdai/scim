@@ -1,0 +1,821 @@
+scim (1.4.20-0ubuntu1ppa1) unstable; urgency=medium
+
+  [ Derek Dai]
+  * add flatpak IBus portal support
+  * add GTK4 support
+  * add QT5 support
+
+ -- Derek Dai <daiderek@gmail.com>  Fri, 29 May 2022 00:35:00 +0800
+
+scim (1.4.19-1) unstable; urgency=medium
+
+  [ Derek Dai]
+  * re-structure README and rename to README.md
+  * README.md: add Travis CI build status badge
+  * control:
+    - add build time dependencies: libxcb-keysyms1-dev libqt5x11extras5-dev
+      qtbase5-private-dev libsystemd-dev
+  * add Qt5 client support
+  * remove Qt4 client support due to upsteam drop Qt4 maintainance
+  * add IBus portal support
+
+ -- Derek Dai <daiderek@gmail.com>  Thu, 29 Apr 2020 10:07:15 +0800
+
+scim (1.4.18-2) unstable; urgency=medium
+
+  * copyright: update to 2018
+  * control:
+    - update VCS URIs
+    - update to Debian Standard 4.1.4
+
+ -- Rolf Leggewie <foss@rolf.leggewie.biz>  Sun, 15 Apr 2018 20:08:23 +0800
+
+scim (1.4.18-1) unstable; urgency=medium
+
+  * new upstream version 1.4.18
+    - compiles fine with gcc7. Closes: #853654
+  * update watch file to point to github
+  * copyright: update my copyright to 2017
+  * control: update to Debian Standard 4.1.0
+
+ -- Rolf Leggewie <foss@rolf.leggewie.biz>  Tue, 29 Aug 2017 10:37:28 +0800
+
+scim (1.4.17-1) unstable; urgency=medium
+
+  [ Tz-Huan Huang ]
+  * new upstream release 1.4.17
+    - fixes "scim breaks compose key". Closes: #618763, LP: #610979.
+    - fixes "Backspace and delete keys dysfunctional in gedit".
+      Closes: #747154, LP: #1315579, LP: #343708, LP: #157289.
+    - fixes "problem in 'quick find/search' of generic file manager".
+      Closes: #821869, LP: #287719.
+  * drop two patches that were upstreamed
+
+  [ Rolf Leggewie ]
+  * control: switch homepage for scim from sf.net to github
+
+ -- Rolf Leggewie <foss@rolf.leggewie.biz>  Tue, 31 May 2016 15:15:06 +0800
+
+scim (1.4.16-3) unstable; urgency=medium
+
+  [ Santiago Vila ]
+  * scimplify build process and make it more robust. Closes: #806105
+    - Drop unnecessary use of "set -e" in debian/rules.
+    - Drop unnecessary use of debian/*.install.in files.
+    - Rename override_dh_install to override_dh_install-arch
+      for dpkg-buildpackage -A to work
+
+  [ Rolf Leggewie ]
+  * control:
+    - add Benda to Debian Scim Maintainers
+      a warm welcome to the team!
+    - update to latest Debian standard 3.9.8. No further changes.
+
+ -- Rolf Leggewie <foss@rolf.leggewie.biz>  Mon, 23 May 2016 15:25:27 +0800
+
+scim (1.4.16-2) unstable; urgency=medium
+
+  [ Tz-Huan Huang ]
+  * patches
+    - backport 790a0d15be15 to fix the black boxes issue. Closes: #675715
+
+ -- Rolf Leggewie <foss@rolf.leggewie.biz>  Mon, 16 May 2016 09:24:27 +0800
+
+scim (1.4.16-1) unstable; urgency=medium
+
+  [ Tz-Huan Huang ]
+  * new Upstream release 1.4.16
+  * patches:
+    - drop disable-subdir-objects after pushing it upstream
+    - rebase 01_scim_config.patch to newest upstream code
+    - backport 6ac4af3bfd36 to fix text drawing bug for gtk >= 3.20. Closes: #820746
+
+  [ Rolf Leggewie ]
+  * control: update to Debian Standard 3.9.7. No further changes.
+
+ -- Rolf Leggewie <foss@rolf.leggewie.biz>  Sat, 23 Apr 2016 21:31:14 +0200
+
+scim (1.4.15-6) unstable; urgency=medium
+
+  [ Chris Boot ]
+  * scim.prerm: stop failing on two valid arguments. Closes: #813260
+
+ -- Rolf Leggewie <foss@rolf.leggewie.biz>  Sun, 21 Feb 2016 20:33:29 +0800
+
+scim (1.4.15-5) unstable; urgency=medium
+
+  [ Rolf Leggewie ]
+  * control: drop unused Pre-Depends line from a number of binary pkgs
+
+  [ Matthias Klose ]
+  * Rename libscim8c2a to libscim8v5 for the libstdc++6 triggered ABI
+    change. Closes: #791275.
+    - Add Conflict/Replaces to the old package as necessary
+    - Adjust lintian override files as necessary
+
+ -- Rolf Leggewie <foss@rolf.leggewie.biz>  Thu, 06 Aug 2015 23:06:52 +0800
+
+scim (1.4.15-4) experimental; urgency=medium
+
+  [ Tz-Huan Huang ]
+  * control: multi-archify the scim-im-agent package
+
+  [ Rolf Leggewie ]
+  * postinst: stop special-casing a long-gone package version
+
+ -- Rolf Leggewie <foss@rolf.leggewie.biz>  Mon, 10 Nov 2014 13:41:33 +0800
+
+scim (1.4.15-3) unstable; urgency=medium
+
+  * prerm: stop calling "ua --remove" on upgrade and deconfigure. See #71621
+
+ -- Rolf Leggewie <foss@rolf.leggewie.biz>  Sat, 08 Nov 2014 22:54:07 +0800
+
+scim (1.4.15-2) unstable; urgency=medium
+
+  * no-change rebuild
+
+ -- Rolf Leggewie <foss@rolf.leggewie.biz>  Sat, 25 Oct 2014 13:25:35 +0900
+
+scim (1.4.15-1) unstable; urgency=medium
+
+  [ Tz-Huan Huang ]
+  * new upstream release 1.4.15
+    - build successfully with clang instead of gcc. Closes: #750115
+    - drop 03_backport_964b2221.patch which has landed upstream
+  * debian/control:
+    - bump to policy 3.9.6
+    - update Homepage
+    - add intltool and autopoint to Build-Depends
+  * debian/rules:
+    - use scim's bootstrap script for dh_autoreconf
+    - make sure that clutter-immodule continues to be built
+
+  [ Rolf Leggewie ]
+  * patches: backport 88fbabed7dc2 to disable subdir-objects.
+
+ -- Rolf Leggewie <foss@rolf.leggewie.biz>  Thu, 23 Oct 2014 04:38:37 +0900
+
+scim (1.4.14-6) unstable; urgency=low
+
+  [ William Grant ]
+  * control: build with dh-autoreconf instead of autotools-dev for new libtool
+
+  [ Rolf Leggewie ]
+  * fix spelling mistake in scim-im-agent manpage
+  * control: bump standards version to 3.9.5. no further changes.
+
+ -- Rolf Leggewie <foss@rolf.leggewie.biz>  Sat, 08 Feb 2014 04:06:12 +0100
+
+scim (1.4.14-5) unstable; urgency=low
+
+  * add scim-im-agent man page
+
+ -- Rolf Leggewie <foss@rolf.leggewie.biz>  Sun, 16 Jun 2013 23:55:33 +0900
+
+scim (1.4.14-4) unstable; urgency=low
+
+  [ Rolf Leggewie ]
+  * control: drop obsolete DMUA field
+
+  [ Tz-Huan Huang ]
+  * patches: backport upstream fix to one compiler warning
+
+ -- Rolf Leggewie <foss@rolf.leggewie.biz>  Sat, 15 Jun 2013 18:02:36 +0900
+
+scim (1.4.14-3) unstable; urgency=low
+
+  * control:
+    - update info about binary package incompatibilities. Closes: #680988
+    - set scim-clutter-immodule to MA:same
+    - drop inactive co-maintainer
+    - bump to policy 3.9.4
+  * scim-dev-doc:
+    - let libjs-jquery provide jquery.js instead of shipping our own
+    - stop shipping private copy of FreeSans.ttf
+  * copyright: update my copyright to 2013
+
+ -- Rolf Leggewie <foss@rolf.leggewie.biz>  Sat, 11 May 2013 18:25:00 +0800
+
+scim (1.4.14-2) unstable; urgency=low
+
+  * release 1.4.14-1x1 to unstable
+
+ -- Rolf Leggewie <foss@rolf.leggewie.biz>  Sun, 15 Jul 2012 12:04:35 +0800
+
+scim (1.4.14-1x1) experimental; urgency=low
+
+  * scim-clutter-immodule: install files from multi-arch paths.
+    Closes: #679724
+
+ -- Rolf Leggewie <foss@rolf.leggewie.biz>  Wed, 04 Jul 2012 12:35:06 +0800
+
+scim (1.4.14-1) unstable; urgency=low
+
+  [ Rolf Leggewie ]
+  * new upstream release 1.4.14
+    - drop 32_scim-1.4.8-fix-dlopen.patch which has landed upstream
+  * bump compat level to 9
+  * debian/control: add Toni Mueller as co-maintainer
+    Welcome aboard!
+
+  [ Tz-Huan Huang ]
+  * start shipping a couple of newly introduced im-module packages
+  * debian/rules:
+    - simplify dh_auto_install override where upstream changes allow this
+    - drop -fpermissive from CXXFLAGS, fixed upstream
+  * debian/README.*: update the documentation
+
+ -- Rolf Leggewie <foss@rolf.leggewie.biz>  Sat, 30 Jun 2012 11:21:42 +0800
+
+scim (1.4.13-5) unstable; urgency=low
+
+  * libscim-dev: depend on libgtk-3-dev. Closes: #676790
+
+ -- Rolf Leggewie <foss@rolf.leggewie.biz>  Tue, 12 Jun 2012 10:42:11 +0800
+
+scim (1.4.13-4) unstable; urgency=low
+
+  * debian/rules:
+    - empty dependency_libs field in all *.la files below /usr/lib.
+    - adjust paths in .la files for multi-arch. Closes: #675688
+    - add -fpermissive to CXXFLAGS as a temp workaround. Closes: #674814
+
+ -- Rolf Leggewie <foss@rolf.leggewie.biz>  Sun, 03 Jun 2012 15:11:26 +0800
+
+scim (1.4.13-3) unstable; urgency=low
+
+  * multi-archify libscim-dev (closes: #675224) and scim-modules-socket
+
+ -- Rolf Leggewie <foss@rolf.leggewie.biz>  Sat, 02 Jun 2012 22:13:06 +0800
+
+scim (1.4.13-2) unstable; urgency=low
+
+  * libscim8c2a: install files to multi-arch paths. Closes: #674813
+
+ -- Rolf Leggewie <foss@rolf.leggewie.biz>  Mon, 28 May 2012 09:48:44 +0800
+
+scim (1.4.13-1) unstable; urgency=low
+
+  * new upstream release. Closes: #649872, LP: #933908
+    - input in iceweasel works again. Closes: #642929
+    - drop the 22 (out of 24!) patches that we pushed upstream. Yay!
+    - rebase the remaining two patches
+    - adds gtk3 support. consolidate it with gtk2 support in new package
+      scim-gtk-immodules.  Closes: #641140, Closes: #632094, LP: #931822
+  * debian/control:
+    - update to latest Standards version. no further changes.
+    - drop inactive co-maintainers from Uploaders as requested
+      Li, Ming-Hua and Osamu, thank you for your work over the years
+    - add Tz-Huan as new co-maintainer. Welcome aboard! Closes: #661106
+    - update package dependency information (build and run time)
+  * debian/copyright:
+    - point to version-agnostic download page upstream
+    - drop old and add new co-maintainers
+    - update my copyright
+  * debian/rules:
+    - relax shlibs version requirement on libscim to 1.4
+    - catch errors to comply with policy 4.6. Thx Jwilk!
+  * re-enable straight lucid backporting
+  * drop all packaging code related to obsolete and gone Chinese manual
+  * dynamically generate debian/*.install files for multi-arch
+  * explicitly compile the docs. They are no longer part of upstream tarball.
+
+ -- Rolf Leggewie <foss@rolf.leggewie.biz>  Sun, 27 May 2012 15:36:22 +0800
+
+scim (1.4.9-7) unstable; urgency=medium
+
+  * fix FTBFS from introduction of multi-arch. Closes: #640629, LP: #832945.
+    full multi-arch support still needs further work.
+
+ -- Rolf Leggewie <foss@rolf.leggewie.biz>  Tue, 13 Sep 2011 23:53:16 +0900
+
+scim (1.4.9-6) unstable; urgency=low
+
+  * debian/im-switch/scim-immodule: test for readability instead of
+    executability of immodules files.  Closes: #595150.
+  * debian/patches/72_fix-fr-translation-hindi.patch
+    Fix translation for "Hindi". (LP: #310123)
+
+ -- Rolf Leggewie <foss@rolf.leggewie.biz>  Tue, 26 Oct 2010 03:43:00 +0900
+
+scim (1.4.9-5) unstable; urgency=low
+
+  * debian/copyright: add my copyright
+  * debian/control: update to standard 3.9.1, no further changes necessary
+
+ -- Rolf Leggewie <foss@rolf.leggewie.biz>  Wed, 11 Aug 2010 18:28:44 +0200
+
+scim (1.4.9-4) unstable; urgency=medium
+
+  * debian/patches: push back patches upstream, document status
+  * debian/rules: empty dependency_libs field in .la files (Closes: 591628)
+
+ -- Rolf Leggewie <foss@rolf.leggewie.biz>  Sun, 08 Aug 2010 21:04:51 +0200
+
+scim (1.4.9-3) unstable; urgency=low
+
+  [ Osamu Aoki ]
+  * update debian/control pointing to git repo
+
+  [ Rolf Leggewie ]
+  * debian/control: take over maintainership of scim from Ming-Hua
+  * debian/control: add DMUA field
+  * debian/patches/70_fix-disappeared-status-icon.dpatch: fix missing
+    taskbar icon (LP: #475800)
+  * debian/control: update to 3.8.4 standard
+  * debian/README.source: document commands to get patched source
+  * debian/source: make explicit that we are still using DebSrc1.0
+    format
+  * add help2man-generated man pages for scim-setup and scim-config-
+    agent
+
+  [ Osamu Aoki ]
+  * fix broken manpages
+  * conversion to 3.0 (quilt) format
+  * renumbered patches to match FC14
+  * used GTK_IM_MODULE=scim as default. Closes: #587524
+  * Supported scim-bridge
+  * added package dependency to im-config etc.
+  * debian/rules: converted to new dh syntax
+  * imported patches including one for rpath from the FC14 package.
+  * replaced config by the FC14 scim-system-config
+  * build with autoreconf
+  * fixed doc-base for scim-dev-doc. Closes: #295802
+
+ -- Osamu Aoki <osamu@debian.org>  Sat, 03 Jul 2010 23:10:21 +0900
+
+scim (1.4.9-2) unstable; urgency=low
+
+  The "contributions from Ubuntu" release
+
+  [ Rolf Leggewie ]
+  * debian/README*: fix some spelling mistakes and bitrot
+  * debian/rules: remove obsolete Chinese manual (Closes: #427520)
+  * debian/control: 
+    - let scim-bridge pull in clients packages by default
+    - let libscim8c2a conflict with older versions of scim-gtk2-immodule
+      to offer Ubuntu a safe way out of earlier packaging mistakes
+  * debian/scim.postinst: improve handling of update-alternatives
+  * debian/patches: 
+    - push back and update a number of patches from Ubuntu
+    - drop AltGr as trigger key from 20_scim_config.dpatch
+  * add a lintian override for libscim8c2a package
+
+  [ Jari Aalto ]
+  * 60_gcc-4.4-const-char.dpatch: fix compile with gcc 4.4 (Closes: #560486)
+
+ -- Rolf Leggewie <foss@rolf.leggewie.biz>  Fri, 15 Jan 2010 15:03:37 +0100
+
+scim (1.4.9-1) unstable; urgency=low
+
+  [ Rolf Leggewie ]
+  * new upstream release (Closes: #525289)
+  * fix spelling mistake in im-switch files.  (Closes: #494189)
+  * update to standard 3.8.1 and make lintian clean
+  * drop 90_relibtoolize.dpatch, looks like the retooling was done upstream
+
+  [ LI Daobing ]
+  * debian/control: 
+    - add me to uploaders. 
+    - bump debhelper version to >= 7.
+    - fix typo in description: GTK -> GTK+.
+    - fix typo in description: meta package -> metapackage.
+  * debian/compat:
+    - bump debhelper version to 7.
+  * debian/scim-dev-doc.doc-base: change section to Text. 
+  * debian/rules: 
+    - bump shlib version to 1.4.9.
+    - change "rm" to "rm -f".
+    - remove deprecated desktop entry
+    - fix gtk immodule install dir
+  * debian/patches/00list:
+    - disable 10_remove-deprecated-desktop-entry.dpatch and
+      10_gtk-immodule-install-dir.dpatch.
+
+ -- LI Daobing <lidaobing@debian.org>  Tue, 28 Apr 2009 20:58:08 +0800
+
+scim (1.4.7-3) unstable; urgency=low
+
+  The "give credit where credit is due" release.
+
+  * Update debian/copyright.
+    - Update information about current package maintainers.
+    - Specify upstream release tarball download URL.
+    - Clarify the copyright and licensing information of the files in
+      modules/FrontEnd/IMdkit/ which are under MIT/BSD like licenses.  Thanks
+      ZhengPeng Hou for reporting this issue.  (Closes: #438639)
+    - Clarify copyright and licensing of Debian packaging.
+    - Refer to /usr/share/common-licenses/LGPL-2.1 for the text of LGPL,
+      instead of the symbolic link.
+  * Define $XIM_PROGRAM_SETS_ITSELF_AS_DAEMON variable in both "scim" and
+    "scim-immodule" im-switch settings, to avoid leaving a zombie process when
+    im-switch is used to start scim.  (Closes: #431294)
+  * Add 50_validate-desktop-entry dpatch, to fix a few issues in
+    scim-setup.desktop revealed by desktop-file-validate tool.
+    - Use absolute path for the icon.
+    - Remove deprecated "Applications" category.
+    - Remove deprecated key "Encoding".
+  * Change XS-Vcs-* fields in debian/control to Vcs-*, now that they are
+    supported by dpkg.  Bump the dpkg-dev version in build dependency to
+    1.14.6, to guarantee that we have a dpkg that supports this feature.
+  * Use the official "Homepage" field in debian/control instead of putting the
+    upstream homepage in package's long description.
+  * Update to policy version 3.7.3.
+
+ -- Ming Hua <minghua-guest@users.alioth.debian.org>  Mon, 28 Jan 2008 10:01:04 -0600
+
+scim (1.4.7-2) unstable; urgency=low
+
+  The "late documentation is still better than no documentation" release.
+
+  * Enable SCIM's Qt 3 IM module setting in the im-switch configuration file
+    /etc/X11/xinit/Xinput.d/scim-immodule.  The module is provided by the
+    scim-qtimm package.
+  * Don't install desktop entry scim-setup.desktop in deprecated location
+    /usr/share/control-center-2.0/capplets/ anymore.
+    - Add 10_remove-deprecated-desktop-entry dpatch to remove relevant part in
+      extras/setup/Makefile.am.
+    - Regenerate 90_relibtoolize dpatch.
+    - Remove the "usr/share/control-center-2.0/capplets/scim-setup.desktop"
+      line in debian/scim.install.
+  * Update scim package's README.Qt notes to reflect the changes related to
+    Qt 3 IM module since etch release.
+  * Add an entry in scim package's NEWS.Debian.gz notes to explain the
+    /FrontEnd/X11/Dynamic setting change, the problem it can cause, and the
+    workarounds.
+  * Print the value of environment variable $QT_IM_MODULE in reportbug script.
+
+ -- Ming Hua <minghua-guest@users.alioth.debian.org>  Sat, 13 Oct 2007 22:17:59 -0500
+
+scim (1.4.7-1) unstable; urgency=low
+
+  The "keeping up with upstream" release.
+
+  * New upstream release.
+    - Include missing header, this time <cstring>, for a few files, to make
+      scim buildable with (the constantly evolving) GCC 4.3.
+      (Closes: #417686, again)
+    - Remove an infinite loop with 0.1 second timeout in the X11 frontend to
+      avoid waking up CPU constantly, therefore preserve power consumption and
+      extend laptop battery life.  (Fixes LP: #122445)
+    - Change 10_gtk-immodule-install-dir dpatch to patch configure.ac instead
+      of extras/gtk2_immodule/Makefile.am, to adapt to the upstream change.
+    - Regenerate 90_relibtoolize dpatch.  Also adjust the timestamp touching
+      in debian/rules accordingly.
+  * Clarify build dependency.
+    - Remove intltool as upstream tarball ships its own 0.33 version.
+    - Add libpango1.0-dev, libglib2.0-dev, and pkg-config explicitly (used to
+      be pulled in by libgtk2.0-dev).
+  * Add libx11-dev as a dependency of libscim-dev explicitly, it used to be
+    pulled in by libgtk2.0-dev.
+  * Add scim-thai to scim's "Suggests:" list.
+  * Add "-W -g" compiler flags back.  The warnings are somehow useful when
+    reading the build logs, and the debug information will be useful for
+    manually built packages with DEB_BUILD_OPTIONS=nostrip.
+  * Change maintainer's email address.
+
+ -- Ming Hua <minghua-guest@users.alioth.debian.org>  Sat, 30 Jun 2007 21:41:52 -0500
+
+scim (1.4.6-1) unstable; urgency=low
+
+  The "Oh, shiny!" release.
+
+  * New upstream release.  (Closes: #399736)
+    - Include <climits> header in src/scim_iconv.cpp, fixing FTBFS with GCC
+      4.3.  Thanks to Martin Michlmayr for testing and the patch.
+      (Closes: #417686)
+    - The "Exit" item in the menu of notification area icon is built by
+      default now, so that users can quit scim from the graphical interface.
+      (Closes: #417950)
+    - ABI changed, bump shlibs version to libscim8c2a (>= 1.4.6).
+    - Add debian/libscim-dev.NEWS file to alert the changes of module
+      installation path (will be installed as the NEWS.Debian file for
+      libscim-dev package).  Also rename debian/NEWS file to debian/scim.NEWS.
+  * For the install directory of GTK IM module, use GTK binary version from
+    pkg-config results instead of hardcoded value.  Thanks to Loïc Minier for
+    the patch.  (Closes: #420497)
+  * Rename 11_relibtoolize.dpatch to 90_relibtoolize.dpatch and regenerate it.
+  * Correct a typo in the package description of scim.
+  * Add XS-Vcs-Svn and XS-Vcs-Browser fields.
+  * Use ${source:Version} and ${binary:Version} for versioned dependencies
+    instead of deprecated ${Source-Version}.  Add dpkg-dev (>= 1.13.19) to
+    Build-Depends to support this format.
+  * Add "Enhances: scim" relationship for scim-gtk2-immodules and
+    scim-modules-socket.
+
+ -- Ming Hua <minghua@rice.edu>  Fri, 04 May 2007 01:01:47 -0500
+
+scim (1.4.4-8) unstable; urgency=low
+
+  The "etch is released, welcome lenny" release.
+
+  * Rewrite debian/rules.
+    - Use the platform detection code recommended by autotools-dev.
+    - Drop unused "-W -g" compiler flags.
+    - Do not use binary-common target anymore and separate binary-arch and
+      binary-indep target completely.
+    - Add more safeguarding code to detect building errors.
+    - Finally remove all the cruft introduced by dh_make.
+  * Adapt to GTK+ 2.10 ABI change.  (Closes: 419314)
+    - Install GTK IM module into /usr/lib/gtk-2.0/2.10.0/immodules.
+    - Bump libgtk2.0-dev build dependency to >= 2.10.1-1.
+    - Use dh_gtkmodules in debian/rules instead of calling
+      update-gtk-immodules in maintainer scripts.  The postinst and postrm
+      scripts for scim-gtk2-immodule are empty now and therefore removed.
+    - Add ${misc:Depends} to scim-gtk2-immodule's dependency list, and remove
+      libgtk2.0-bin.
+  * Update debian/watch file to format version 3 and use qa.debian.org
+    redirector for sourceforge.net.
+  * Drop libxt-dev in build dependency as it's not necessary anymore after
+    relibtoolization.
+
+ -- Ming Hua <minghua@rice.edu>  Tue, 17 Apr 2007 02:26:48 -0500
+
+scim (1.4.4-7) unstable; urgency=high
+
+  * Removed 'debian/svn-commit.tmp' file from failed svn commit.
+
+ -- Osamu Aoki <osamu@debian.org>  Tue,  2 Jan 2007 14:30:12 +0900
+
+scim (1.4.4-6) unstable; urgency=high
+
+  * Removed m17n-env in control. (closes: Bug#405032)
+  * Updated README.Debian for editting non-UTF-8 files.
+
+ -- Osamu Aoki <osamu@debian.org>  Mon,  1 Jan 2007 01:35:57 +0900
+
+scim (1.4.4-5) unstable; urgency=low
+
+  * Adjust build dependency to X.org package layout:  Change x-dev to
+    x11proto-core-dev, and drop all alternative xlibs-dev dependencies.
+  * Relibtoolize.  Add one big patch 11_relibtoolize.dpatch for all the
+    autotools generated files.
+  * Make scim-gtk2-immodule depend on libgtk2.0-bin explicitly as it uses
+    /usr/sbin/update-gtk-immodules in the maintainer scripts.  Thanks to caleb
+    on OFTC.
+  * Fix the postrm script of scim-gtk2-immodule so that it can be removed
+    cleanly when libgtk2.0-bin is already removed (This is Ubuntu bug #52087).
+  * Update to policy version 3.7.2, no actual changes needed.
+
+ -- Ming Hua <minghua@rice.edu>  Tue, 12 Sep 2006 16:54:30 -0500
+
+scim (1.4.4-4) unstable; urgency=low
+
+  * Fixed typo in /etc/X11/xinit/xinput.d/scim-immodule thanks to
+    AWASHIRO Ikuya.
+
+ -- Osamu Aoki <osamu@debian.org>  Sun, 18 Jun 2006 01:11:50 +0900
+
+scim (1.4.4-3) unstable; urgency=low
+
+  * Fixed typo in /etc/X11/xinit/xinput.d/scim thanks to Ethan
+    Glasser-Cam. (Closes: #370606)
+  * Changed to use XIM for all applications for better im-switch
+    behavior.
+  * Added scim-immodule choice for im-switch while marking it
+    deprecated in README.Debian.
+
+ -- Osamu Aoki <osamu@debian.org>  Sat, 17 Jun 2006 09:55:08 +0900
+
+scim (1.4.4-2) unstable; urgency=low
+
+  * Updated documentation and dependency to match m17n-env changes.
+  * Provided support for im-switch.
+
+ -- Osamu Aoki <osamu@debian.org>  Sat, 20 May 2006 03:03:39 +0900
+
+scim (1.4.4-1) unstable; urgency=low
+
+  * New upstream release.
+    - The locales that prefer scim as GTK IM module has changed.
+    - Bump libgtk2.0-dev build dependency to >= 2.4.0.
+  * Complete documetation rewrite, add two more README files for using SCIM in
+    different desktop environments.
+  * Update scim(1) man page.
+  * Fix typo in reportbug script.
+
+ -- Ming Hua <minghua@rice.edu>  Mon, 16 Jan 2006 21:33:38 -0600
+
+scim (1.4.2-1) unstable; urgency=low
+
+  * New upstream release.
+  * debian/{control,rules,libscim8.install}:  C++ ABI transtion, rename binary
+    package libscim8 to libscim8c2a.  (Closes: #339261)
+  * debian/control:  Update Suggests list.  Add Japanese IM engines and
+    replace scim-chinese with scim-pinyin.  (Closes: #335909)
+  * debian/control:  Upgrade to policy version 3.6.2 (no actual changes).
+  * debian/copyright:  Update copyright notice and FSF address.
+  * debian/{control,rules}:  Build-Depends on autotools-dev and use the
+    config.guess and config.sub files from autotools-dev unconditionally.
+  * debian/control:  Use individual X library packages in Build-Depends
+    instead of the xlibs-dev metapackage.
+  * debian/{scim.script,rules}:  Add reportbug information gathering script.
+
+ -- Ming Hua <minghua@rice.edu>  Fri, 25 Nov 2005 17:55:25 -0600
+
+scim (1.4.1-1) unstable; urgency=low
+
+  * New upstream release.
+  * debian/{libscim6c2,libscim8,libscim-dev,scim,scim-module-socket}.install,
+    debian/{control,rules}:  ABI change.  Change binary package libscim6c2 to
+    libscim8, and all modules are in /usr/lib/scim-1.0/1.4.0/ now.  There are
+    also a new shared library (libscim-x11utils-1.0) and new modules.
+  * debian/patches/{00list,10gtk-immodule-install-dir.dpatch}:  Unfuzzy patch,
+    and rename it to 10_gtk-immodule-install-dir.dpatch according to new
+    naming template.
+  * debian/watch:  Track 1.4 series.
+  * debian/NEWS:  Change news entry version from 1.2.3-1 to 1.4.1-1, since
+    1.2.3-1 was never released.  Also refer to scim 1.4 instead of 1.2.
+
+ -- Ming Hua <minghua@rice.edu>  Thu, 11 Aug 2005 22:38:20 -0500
+
+scim (1.2.3-1) unstable; urgency=low
+
+  * New upstream release.  (Closes: #308064)
+    - Build with GCC 4.0.  Use libscim6c2 as the shared library package name
+      to avoid problem with some unofficial builds.  [minghua]
+  * debian/NEWS:  Create this file, and add notes about scim 1.0 to 1.2
+    upgrade and C++ ABI transtion.  [minghua]
+  * debian/patches/{00list,20-gcc-4.0-ftbfs.dpatch}:  Already included by
+    upstream, removed.  [minghua]
+  * debian/control, debian/{scim,scim-dev,libscim6c2,libscim-dev}.install:
+    Build separate libscim6c2 and libscim-dev binary packages.  [minghua]
+  * debian/control, debian/scim-config-gconf.{install,prerm,postinst}:  Remove
+    binary package scim-config-gconf, as upstream doesn't provide this module
+    anymore.  [minghua]
+  * debian/control, debian/scim-{server,config,frontend}-socket.install,
+    debian/scim-modules-socket.install:  Combine configure, front end, and IM
+    engine modules for socket into one binary package.  [minghua]
+  * debian/rules, debian/scim-modules-socket.install, debian/scim.install:
+    Change the module path, and adjust to the added and deleted files by
+    upstream.  [minghua]
+  * debian/control: [minghua]
+    - Remove old Conflicts, we only support upgrade from sarge from now on.
+    - Make scim Conflicts with all old dynamic module packages.
+    - Have libscim-dev depends on libgtk2.0-dev and libpango1.0-dev since
+      their header files are #included directly.  Also remove useless
+      libc6-dev | libc-dev dependency.
+  * debian/watch:  Track 1.2 series.  [minghua]
+
+ -- Ming Hua <minghua@rice.edu>  Sun,  7 Aug 2005 14:18:29 -0500
+
+scim (1.0.2-3) unstable; urgency=medium
+
+  * Urgency set to medium to push these documentation changes into sarge.
+  * debian/README.Debian:  Documentation update.  [minghua]
+    - Clarify the situation of skim and scim-qt-immodule in Debian.
+    - List scim-chewing as available IM engine instead of a potential one since
+      it's in sarge now.  (Closes: #306759)
+    - List scim-prime and scim-skk as potetial IM engines.
+    - Remove notes about gksu configurations, since gksu 1.2.4 and higher
+      doesn't lock XIM anymore.
+  * debian/control:  Make all dynamic loadable module packages depend on scim
+    (<< 1.1), to smooth future upgrades.  [minghua]
+
+ -- Ming Hua <minghua@rice.edu>  Mon, 16 May 2005 21:11:00 -0500
+
+scim (1.0.2-2) unstable; urgency=low
+
+  * debian/README.Debian:  Fix typo (Thanks, Carlos Z.F. Liu).  [alee, minghua]
+  * debian/control:
+    - Make scim conflict with all old (<< 1.0.0) modules.  [minghua]
+    - Change the upstream website.  [minghua]
+  * debian/copyright:  Change the upstream download repository to SourceForge.
+    [minghua]
+  * debian/README.Debian: ~/.scim/config -> ~/.scim/global (Thanks, Florian
+    Schlichting).  (Closes: #291543)  [osamu]
+  * debian/README.Debian: mention gksu configuration. (Closes: #283746)
+    [osamu]
+
+ -- Ming Hua <minghua@rice.edu>  Wed,  2 Feb 2005 00:19:03 +0100
+
+scim (1.0.2-1) unstable; urgency=low
+
+  * New Upstream release.
+  * debian/control:  Make scim conflict with old scim-gtk2-immodule (<<
+    1.0.0) to avoid broken upgrade if user choose to upgrade only scim
+    but not scim-gtk2-immodule.  (Closes: #287348)  [minghua]
+  * debian/patches/{00list,20redirect-to-cerr.dpatch,30gnumeric.dpatch}:
+    Delete old patches that are already included by upstream.  [minghua]
+  * debian/patches/{00list,20-gcc-4.0-ftbfs.dpatch}:  Add patch from Andreas
+    Jochens <aj@andaco.de> to fix FTBFS on amd64/gcc-4.0.  (Closes: #288470)
+    [minghua]
+  * debian/watch:  Only track 1.0.x branch on upstream.  [osamu,minghua]
+
+ -- Ming Hua <minghua@rice.edu>  Tue, 11 Jan 2005 20:14:17 -0600
+
+scim (1.0.1-4) unstable; urgency=low
+
+  * Update README.Debian.  [osamu]
+  * debian/control:  Make scim-gtk2-immodule depend on scim-frontend-socket
+    and scim-config-socket.  This prevents IM engine loading each time scim
+    gtk module is invoked (which happens very often if GTK_IM_MODULE=scim).
+    (Closes: #285623)  [minghua]
+  * debian/watch:  Switch to Sourceforge repository since SCIM isn't hosted
+    on freedesktop.org anymore.  [minghua]
+
+ -- Ming Hua <minghua@rice.edu>  Tue, 21 Dec 2004 20:36:10 -0600
+
+scim (1.0.1-3) unstable; urgency=high
+
+  * Patch to prevent data loss in gnumeric while moving cursor
+    by the upstream (Closes: #280661)
+
+ -- Osamu Aoki <osamu@debian.org>  Fri, 19 Nov 2004 23:22:41 +0100
+
+scim (1.0.1-2) unstable; urgency=high
+
+  * Patch to redirects the messages to standard error per Aaron M. Ucko. 
+    (Closes: #280374)
+
+ -- Osamu Aoki <osamu@debian.org>  Tue, 09 Nov 2004 07:31:17 +0100
+
+scim (1.0.1-1) unstable; urgency=low
+
+  * New upstream release. (Closes: #269946)
+    + Fix FTBFS problem with gcc-3.4. (Closes: #266045)
+  * debian/control, debian/rules, debian/patches/:  Switch to dpatch system.
+  * debian/control:  Rewrite the descriptions for most packages, and update
+    Conflict: and Depends: relations.
+  * debian/scim-dev-doc.doc-base:  Rewrite the descriptions.
+  * debian/scim-config-gconf.{postinst,prerm}:  Add scripts to register and
+    unregister gconf2 schemas.
+  * debian/watch:  Fix source watchfile line format.
+  * debian/scim.1, debian/scim.manpages:  Add man page scim(1), thanks to
+    Osamu Aoki.
+  * debian/README.Debian:  Update user's manual to reflect 1.0 series changes.
+  * Added Osamu Aoki as uploader.
+  * Update README.Debian by Osamu Aoki.
+
+ -- Ming Hua <minghua@rice.edu>  Fri, 29 Oct 2004 20:48:12 +0200
+
+scim (0.9.7-3) unstable; urgency=low
+
+  * debian/control:  Let scim-gtk2-immodule depends on scim-server-socket,
+    otherwise GDM will start scim and ignore all character input.
+    (Closes: #272321)  Also have scim-gtk-immodule depends on
+    scim-frontend-socket and recommends scim-config-socket, so that the GTK IM
+    module mode works properly.
+  * debian/rules:  Don't install Makefile.* with documents.  (Closes: #255336)
+  * configs/config:  Set /FrontEnd/X11/OnTheSpot to false, avoiding glitches
+    in some applications such as Mozilla and OpenOffice.org.
+  * debian/README.Debian:  Add a brief English user's guide.
+  * debian/control, debian/copyright:  Update upstream website address.
+
+ -- Ming Hua <minghua@rice.edu>  Fri, 24 Sep 2004 21:09:08 -0500
+
+scim (0.9.7-2) unstable; urgency=low
+
+  * Add intltool (>= 0.22) to Build-Depends, without it scim FTBFS on all
+    architectures.  (Closes: #255215)
+  * Fix old directory reference in debian/scim-dev-doc.doc-base to reflect the
+    new package name.  (Closes: #255159)
+  * Change extras/gtk2_immodule/Makefile.{am,in} to install im-scim.so into
+    /usr/lib/gtk-2.0/2.4.0/immodules, also add postinst and postrm scripts for
+    package scim-gtk2-immodule.  (Closes: #255177)
+
+ -- Ming Hua <minghua@rice.edu>  Sat, 19 Jun 2004 22:24:09 -0500
+
+scim (0.9.7-1) unstable; urgency=low
+
+  * Initial release for upload into the official Debian archive.
+  * New upstream release.
+  * Followed the package split in my unofficial scim 0.4.0 package,
+    and modified according to the upstream scim.spec:
+     * merged scim-frontend-x11, scim-server-rawcode, scim-server-table,
+       scim-config-simple into the main scim package;
+     * removed scim-suite.
+  * Removed Build-Depends: gif2png.
+  * Renamed scim-doc as scim-dev-doc.
+  * The main scim package Suggests: scim-chinese, scim-tables-zh,
+    scim-tables-ja, scim-tables-ko, scim-tables-additional.
+  * Updated package descriptions with ideas from
+    http://freedesktop.org/~suzhe/download.html.
+  * Many thanks to Ming Hua <minghua@rice.edu> for packaging
+    scim 0.9.2 and 0.9.6 on Debian Alioth.
+  * NMU: I won't have time to maintain this package in the longterm, so...
+    Ming Hua is the maintainer of this package!  :-)
+
+ -- Anthony Fok <foka@debian.org>  Sun,  6 Jun 2004 23:26:49 +0800
+
+scim (0.9.6-1) unstable; urgency=low
+
+  * New upstream version 0.9.6.
+
+ -- Ming Hua <minghua@rice.edu>  Wed, 28 Apr 2004 16:36:25 -0500
+
+scim (0.9.2-1) unstable; urgency=low
+
+  * Initial Release, based on upstream version 0.9.2.
+  * Debianize as a single binary package, will try to split later.
+
+ -- Ming Hua <minghua@rice.edu>  Sun, 29 Feb 2004 22:12:41 -0600
+
+scim (0.4.0-1) unstable; urgency=low
+
+  * Initial Release.
+  * Applied scim-0.4.0-generic-table.patch by upstream author James Su
+    to fix a bug reported by WONG Yiu Fai.
+
+ -- Anthony Fok <foka@debian.org>  Mon, 21 Apr 2003 22:21:58 +0800

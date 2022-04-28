@@ -1,0 +1,4 @@
+usr/lib/*/libscim-*[ao]
+usr/lib/*/pkgconfig/scim*.pc
+usr/include/scim-1.0/*.h
+usr/include/scim-1.0/*/*.h

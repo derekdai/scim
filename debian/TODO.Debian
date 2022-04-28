@@ -1,0 +1,14 @@
+Short Term
+----------
+Add scim-setup.desktop handling in postinst and postrm.
+
+Use AM_MAINTAINER_MODE in configure.ac to avoid timestamp skews.
+
+
+Long Term
+---------
+Investigate "SONAME in dynamic loaded module" issue.
+ Solved? http://bugs.debian.org/cgi-bin/bugreport.cgi?bug=323216
+
+
+

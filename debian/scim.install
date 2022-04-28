@@ -1,0 +1,31 @@
+etc/scim/config
+etc/scim/global
+
+debian/im-switch/scim etc/X11/xinit/xinput.d
+debian/im-switch/scim-immodule etc/X11/xinit/xinput.d
+
+usr/bin/scim
+usr/bin/scim-config-agent
+usr/bin/scim-setup
+
+usr/lib/*/scim-1.0/scim-helper-launcher
+usr/lib/*/scim-1.0/scim-helper-manager
+usr/lib/*/scim-1.0/scim-launcher
+usr/lib/*/scim-1.0/scim-panel-gtk
+
+usr/lib/*/scim-1.0/1.4.0/Config/simple.so
+usr/lib/*/scim-1.0/1.4.0/Filter/sctc.so
+usr/lib/*/scim-1.0/1.4.0/FrontEnd/x11.so
+usr/lib/*/scim-1.0/1.4.0/Helper/setup.so
+usr/lib/*/scim-1.0/1.4.0/IMEngine/rawcode.so
+usr/lib/*/scim-1.0/1.4.0/SetupUI/aaa-frontend-setup.so
+usr/lib/*/scim-1.0/1.4.0/SetupUI/aaa-imengine-setup.so
+usr/lib/*/scim-1.0/1.4.0/SetupUI/panel-gtk-setup.so
+
+usr/share/applications/scim-setup.desktop
+
+usr/share/locale/*/LC_MESSAGES/scim.mo
+usr/share/pixmaps/scim-setup.png
+usr/share/scim/icons/*.png
+
+debian/bug/script usr/share/bug/scim

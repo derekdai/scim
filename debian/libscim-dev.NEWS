@@ -1,0 +1,20 @@
+scim (1.4.6-1) unstable; urgency=low
+
+  Since version 1.4.5, scim has changed the $(moduledir) variable in the
+  scim.pc file, from "/usr/lib/scim-1.0" to "/usr/lib/scim-1.0/1.4.0".
+  This means the SCIM module packages that built against the new
+  libscim-dev package will have their files installed to a different
+  path.
+
+  Therefore, all those SCIM module packages that used a patch to install
+  the module files in paths such as $(moduledir)/1.4.0/IMEngine/ should
+  drop the patch and just install the files in $(moduledir)/IMEngine/,
+  and bump build dependency to libscim-dev (>= 1.4.6-1).  This will keep
+  the files installed in the same /usr/lib/scim-1.0/1.4.0/IMEngine/
+  path.  Packages that didn't have such a patch should pay attention
+  that their module files will be installed in a different path and
+  adjust accordingly (but don't add patch to put the files back to paths
+  like /usr/lib/scim-1.0/IMEngine/, those files should be put into
+  ABI-version specific paths).
+
+ -- Ming Hua <minghua@rice.edu>  Fri, 04 May 2007 00:42:19 -0500

@@ -1,0 +1,63 @@
+scim (1.4.7-2) unstable; urgency=low
+
+  Since 1.4.5, upstream has changed the default setting (in /etc/scim/config)
+  of /FrontEnd/X11/Dynamic from "true" to "false".  This change is to make the
+  "deadkeys" on many European keyboards working correctly with SCIM.
+
+  However, in XIM mode, this setting causes problems for some GTK+ programs,
+  most notable nautilus.  Sometimes, the keyboard input in the program will
+  completely freeze, and nothing you type will show up.  As a temporary
+  workaround, you can choose a different input method other than "X Input
+  Method" in the "Input Methods" list from the right-click menu ("Default"
+  should usually work).
+
+  As the existent user configurations are kept after upgrade, this change
+  should only affect new users or new installs.  If you don't have deadkeys on
+  your keyboard and want to keep using XIM mode, you can change the setting of
+  /FrontEnd/X11/Dynamic in /etc/scim/config file (system configuration) or
+  $(HOME)/.scim/config file (per-user configuration) back to "true" (make sure
+  scim is not running when editing $(HOME)/.scim/config).  Alternatively, you
+  can choose a different input method mode other than XIM, such as using the
+  scim-immodule configuration for im-switch provided by scim package (you need
+  scim-gtk2-immodule package installed to use this configuration).  Read
+  /usr/share/doc/scim/README.GTK for more information about choosing from
+  different input method modes.
+
+ -- Ming Hua <minghua-guest@users.alioth.debian.org>  Mon, 23 Jul 2007 14:38:30 -0500
+
+scim (1.4.4-1) unstable; urgency=low
+
+  Since scim 1.4.3, upstream has changed in which locales GTK+ will prefer
+  scim as the IM module, from "*" (every locale) to "" (no locale).  This
+  means if environment variable GTK_IM_MODULE is not set, GTK+ applications
+  will no longer use scim as its IM module by default (the default module will
+  depend on your locale and other installed input methods).  So if you have
+  been relying on this behavior, your input method in GTK+ applications will
+  stop working after scim upgrade.  To use scim as the GTK input method, make
+  sure you have set GTK_IM_MODULE to scim.  Please read README.GTK in
+  /usr/share/doc/scim/ for more details.
+
+ -- Ming Hua <minghua@rice.edu>  Sun, 15 Jan 2006 03:20:04 -0600
+
+scim (1.4.1-1) unstable; urgency=low
+
+  After upgrading from scim 1.0 to 1.4, you need to restart scim to have
+  it working properly.  The simple way to restart scim is just
+  restarting X.  Also the settings in ~/.scim for 1.0 may be
+  incompatible with 1.4, so if you encounter strange behaviour after
+  upgrading, move ~/.scim out of the way and try again.
+
+  New scim 1.4 packages are not compatible with old IMEngines compiled
+  against scim 1.0.  The new scim 1.4.1-1 package should conflict with
+  all old scim 1.0 packages, but if you are using unofficial IMEngines,
+  you need to install libscim-dev and recompile.
+
+  Debian is having a C++ ABI transition, and new scim 1.4 packages are
+  compiled with g++ 4.0.  This may cause prolem if you are using third
+  party softwares that are compiled with g++ 3.3 (or even some Debian
+  packages that hasn't finished the transition yet), especially if you
+  are using the GTK IM module for scim.  A workaround would be using XIM
+  by setting GTK_IM_MODULE to xim.  Please read the documentation in
+  /usr/share/doc/scim/README.Debian.gz for details.
+
+ -- Ming Hua <minghua@rice.edu>  Thu, 11 Aug 2005 22:36:52 -0500

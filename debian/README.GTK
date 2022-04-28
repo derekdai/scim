@@ -1,0 +1,27 @@
+In GTK+ 2.x/3.x applications, you can use SCIM in two different modes,
+XIM mode or GTK IM mode.  In order to use GTK IM mode, you need to install
+package scim-gtk-immodule-orig (which depends on scim-modules-socket) or
+scim-gtk-immodule (which depends on scim-im-agent).  Then the environment
+variable GTK_IM_MODULE will be used to determine which mode SCIM will use.
+To use XIM mode, set GTK_IM_MODULE to xim (also remember you need to set
+XMODIFIERS to @im=SCIM); to use GTK IM mode, set it to scim-orig (for
+scim-gtk-immodule-orig) or scim (for scim-gtk-immodule).
+
+Note that all GTK+ applications should work fine with SCIM in XIM mode, so
+the package scim-gtk-immodule-orig or scim-gtk-immodule is not essential
+for using SCIM in GTK+/GNOME environments.  A big disadvantage of using
+scim-gtk-immodule-orig is that it may cause mysterious crashes if the GTK+
+application (or some module the application dynamically loads) is linked to a
+different version of standard C++ library (libstdc++) as SCIM is linked to.
+For example, Adobe Reader (acroread) version 7 and the official Mozilla
+Firefox from mozilla.org are both linked to libstdc++5, so they will
+crash if you try to use the SCIM packages in unstable (which are linked
+to libstdc++6) with them if package to supply such modules are installed.
+scim-gtk-immodule doesn't have this problem because it is written in pure C.
+
+There were some concern to use scim-gtk-immodule-orig, but that problem
+seems to be gone by now.  For more details, look at Debian bug #323216 [1].
+
+1. http://bugs.debian.org/cgi-bin/bugreport.cgi?bug=323216
+
+vim:textwidth=78:

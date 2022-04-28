@@ -1,0 +1,15 @@
+Document: scim-dev-doc
+Title: Development Documentation (API Reference) for SCIM
+Author: James Su <suzhe@tsinghua.org.cn>
+Abstract: SCIM (Smart Common Input Method) is an input method (IM)
+ platform.  It provides a common platform for different independent IM
+ programs.  SCIM is highly modularized, providing abstract interfaces to
+ various modules for configuration, IM engine and front end.
+ .
+ This developer manual includes doxygen-generated HTML documentation for
+ the C++ API of SCIM.
+Section: Programming
+
+Format: HTML
+Index: /usr/share/doc/scim-dev-doc/html/index.html
+Files: /usr/share/doc/scim-dev-doc/html/*.html

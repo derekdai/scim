@@ -1,0 +1,55 @@
+Author: Qingyu Wang <qwang@redhat.com>, Jens Petersen <petersen@redhat.com>
+Source: FC14
+Description: replaced content of config by the package data scim-system-config
+--- a/configs/config	2016-04-23 21:52:09.763518543 +0800
++++ b/configs/config	2016-04-23 21:48:53.343760143 +0800
+@@ -1,4 +1,13 @@
+ # This file is encoded in UTF-8 encoding.
++/DefaultIMEngineFactory/si_LK = IMEngine-M17N-si-wijesekera
++/DefaultIMEngineFactory/ta_IN = IMEngine-M17N-ta-tamil99
++# scim-python pinyin
++/DefaultIMEngineFactory/zh_CN = 29ab338a-5a27-46b8-96cd-abbe86f17132
++/DefaultIMEngineFactory/zh_SG = 05235cfc-43ce-490c-b1b1-c5a2185276ae
++# CangJie3
++/DefaultIMEngineFactory/zh_HK = 5da9d4ff-ccdd-45af-b1a5-7bd4ac0aeb5f
++# chewing
++/DefaultIMEngineFactory/zh_TW = fcff66b6-4d3e-4cf2-833c-01ef66ac6025
+ /FrontEnd/OnTheSpot = true
+ /FrontEnd/SharedInputMethod = true
+ /FrontEnd/ChangeFactoryGlobally = false
+@@ -8,11 +17,22 @@
+ /FrontEnd/X11/Dynamic = false
+ /FrontEnd/X11/OnTheSpot = true
+ /FrontEnd/X11/ServerName = SCIM
+-/Hotkeys/FrontEnd/NextFactory = Control+Alt+Down,Shift+Control+KeyRelease+Shift_L,Shift+Control+KeyRelease+Shift_R
+-/Hotkeys/FrontEnd/PreviousFactory = Control+Alt+Up,Shift+Control+KeyRelease+Control_L,Shift+Control+KeyRelease+Control_R
+-/Hotkeys/FrontEnd/ShowFactoryMenu = Control+Alt+Right
++/Hotkeys/FrontEnd/NextFactory = 
++/Hotkeys/FrontEnd/NextFactory/zh_CN = Control+Alt+Down,Shift+Control+KeyRelease+Shift_L,Shift+Control+KeyRelease+Shift_R
++/Hotkeys/FrontEnd/NextFactory/zh_HK = Control+Alt+Down,Shift+Control+KeyRelease+Shift_L,Shift+Control+KeyRelease+Shift_R
++/Hotkeys/FrontEnd/NextFactory/zh_SG = Control+Alt+Down,Shift+Control+KeyRelease+Shift_L,Shift+Control+KeyRelease+Shift_R
++/Hotkeys/FrontEnd/NextFactory/zh_TW = Control+Alt+Down,Shift+Control+KeyRelease+Shift_L,Shift+Control+KeyRelease+Shift_R
++/Hotkeys/FrontEnd/PreviousFactory = 
++/Hotkeys/FrontEnd/PreviousFactory/zh_CN = Control+Alt+Up,Shift+Control+KeyRelease+Control_L,Shift+Control+KeyRelease+Control_R
++/Hotkeys/FrontEnd/PreviousFactory/zh_HK = Control+Alt+Up,Shift+Control+KeyRelease+Control_L,Shift+Control+KeyRelease+Control_R
++/Hotkeys/FrontEnd/PreviousFactory/zh_SG = Control+Alt+Up,Shift+Control+KeyRelease+Control_L,Shift+Control+KeyRelease+Control_R
++/Hotkeys/FrontEnd/PreviousFactory/zh_TW = Control+Alt+Up,Shift+Control+KeyRelease+Control_L,Shift+Control+KeyRelease+Control_R
++/Hotkeys/FrontEnd/ShowFactoryMenu = 
++# disable trigger hotkey by default, except for the locale below:
+ /Hotkeys/FrontEnd/Trigger = Control+space,Zenkaku_Hankaku,Hangul
+-/Hotkeys/FrontEnd/ValidKeyMask = Shift+Control+Alt+Meta+QuirkKanaRo
++/Hotkeys/FrontEnd/Trigger/ja_JP = Zenkaku_Hankaku,Alt+grave,Control+space
++/Hotkeys/FrontEnd/Trigger/ko_KR = Alt+Alt_L+KeyRelease,Shift+space,Control+space,Hangul
++/Hotkeys/FrontEnd/ValidKeyMask = Shift+Control+Alt+Meta+Super+Hyper+CapsLock
+ /Panel/Gtk/Color/ActiveBackground = light sky blue
+ /Panel/Gtk/Color/ActiveText = black
+ /Panel/Gtk/Color/NormalBackground = #F7F3F7
+@@ -20,7 +40,7 @@
+ /Panel/Gtk/Font = default
+ /Panel/Gtk/DefaultSticked = false
+ /Panel/Gtk/LookupTableEmbedded = true
+-/Panel/Gtk/LookupTableVertical = false
++/Panel/Gtk/LookupTableVertical = true
+ /Panel/Gtk/ShowStatusBox = false
+ /Panel/Gtk/ShowTrayIcon = true
+ /Panel/Gtk/ToolBar/AlwaysShow = false

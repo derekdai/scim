@@ -1,0 +1,242 @@
+Source: scim
+Section: utils
+Priority: optional
+Maintainer: Rolf Leggewie <foss@rolf.leggewie.biz>
+Uploaders: Tz-Huan Huang <tzhuan@gmail.com>, Benda Xu <heroxbd@gentoo.org>
+Standards-Version: 4.1.4
+Build-Depends: dpkg-dev (>= 1.14.6), debhelper (>= 9),
+ dh-autoreconf, intltool, autopoint, pkg-config, x11proto-core-dev, libx11-dev,
+ libpango1.0-dev, libglib2.0-dev, libgtk2.0-dev, libgtk-3-dev | libgtk2.0-dev (<< 2.21),
+ libclutter-1.0-dev, libclutter-imcontext-0.1-dev, libxcb-keysyms1-dev,
+ libqt5x11extras5-dev, qtbase5-private-dev, libsystemd-dev, libdbus-1-dev,
+ libltdl-dev, doxygen
+Homepage: https://github.com/scim-im/scim
+Vcs-Browser: https://github.com/leggewie-DM/scim
+Vcs-Git: https://github.com/leggewie-DM/scim.git
+
+Package: scim
+Architecture: any
+Multi-Arch: foreign
+Depends: ${shlibs:Depends}, ${misc:Depends}
+Recommends: scim-gtk-immodule, im-config | im-switch, scim-im-agent
+Suggests: scim-uim, scim-pinyin, scim-hangul, scim-chewing, scim-m17n, scim-prime, scim-anthy, scim-skk, scim-canna, scim-tables-additional, scim-tables-ja, scim-tables-ko, scim-tables-zh, scim-thai
+Description: smart common input method platform
+ Smart Common Input Method (SCIM) is an input method (IM) platform.  Input
+ methods are needed to enter complex characters in many non-latin languages.
+ SCIM provides a common platform for various plugin modules and independent IM
+ programs, as well as a set of modules and programs on its own.  It is highly
+ modularized and exposes abstract interfaces, so that plugin modules with
+ different functions can easily communicate with each other.  The currently
+ supported module types are configuration, IM engine, front end, filter, and
+ setup GUI.
+ .
+ SCIM achieves the communication between IM engines and front ends through
+ both shared library linking and server/client mode.  It supports XIM
+ protocol, as well as GTK+ IM module and Qt IM module.
+ .
+ This package is the main binary package of SCIM.  It includes: the main
+ program scim (GTK+ based) and other support programs; simple configuration
+ module, X11 front end module, rawcode IM engine module,
+ simplified/traditional Chinese conversion filter module, and their
+ corresponding setup GUI modules; GTK+ panel and its setup GUI module; and a
+ GTK+ based setup tool.
+ .
+ SCIM is a well accepted platform and features various input method engines
+ for many languages.  In Debian you can find the following separately packaged
+ IMs useful: scim-tables-{additional,ja,ko,zh}, scim-pinyin, scim-uim,
+ scim-m17n, scim-chewing, scim-anthy, scim-canna, scim-prime, and scim-skk.
+ GTK+ users would also find package scim-gtk-immodule useful for GTK+ IM
+ module support.
+ .
+ For development on SCIM platform, please see the description of scim-dev
+ package.
+
+Package: libscim8v5
+Section: libs
+Architecture: any
+Multi-Arch: same
+Pre-Depends: ${misc:Pre-Depends}
+Depends: ${shlibs:Depends}, ${misc:Depends}
+Conflicts: libscim8c2a
+Replaces: libscim8c2a
+Description: library for SCIM platform
+ SCIM (Smart Common Input Method) is an input method (IM) platform.
+ .
+ This package provides runtime libraries for SCIM platform.
+ .
+ For more information about SCIM, please see the description of scim package.
+
+Package: libscim-dev
+Section: libdevel
+Architecture: any
+Multi-Arch: same
+Depends: libscim8v5 (= ${binary:Version}), libx11-dev, libgtk2.0-dev,
+ libgtk-3-dev | libgtk2.0-dev (<< 2.21), libpango1.0-dev, ${misc:Depends}
+Description: development library for SCIM platform
+ SCIM (Smart Common Input Method) is an input method (IM) platform.
+ .
+ This package provides development libraries on SCIM platform, including the
+ header files and static libraries.  The development documentations can be
+ found in the scim-dev-doc package.
+ .
+ SCIM can be used as a dynamically loaded library on a single machine, or as a
+ server/client model through socket in a network environment.  As a component
+ of the system, SCIM can work with existing IM framework such as XIM or IIIMF
+ (in progress), as well as using client specific IM interface, such as GTK+
+ IM module or Qt IM module.  SCIM provides an IM application, scim, which use
+ various IM engines to provide input methods for many languages, either by
+ native modules (such as scim-pinyin and scim-hangul) or interfaces to other
+ IM libraries (such as scim-anthy, scim-uim, scim-m17n, and scim-chewing).
+ .
+ For more information about SCIM, please see the description of scim package.
+
+Package: scim-gtk-immodule
+Architecture: any
+Multi-Arch: same
+Depends: scim (= ${binary:Version}), scim-im-agent (= ${binary:Version}),
+ ${shlibs:Depends}, ${misc:Depends}
+Provides: scim-gtk2-immodule, scim-gtk-immodule
+Conflicts: scim-gtk2-immodule, scim-gtk-immodule
+Replaces: scim-gtk2-immodule
+Enhances: scim
+Description: GTK+ input method module with SCIM as backend
+ SCIM (Smart Common Input Method) is an input method (IM) platform.
+ .
+ This package is the GTK+ native input method module for SCIM.  It provides
+ a GTK+ IM module for version 2 and 3 of GTK with SCIM as the input backend.
+ This input method module should work within all GTK+ platforms, including
+ gtk-x11, gtk-linuxfb and gtk-directfb.
+ .
+ The GTK+ IM module communicates with SCIM backend through the IM agent
+ provided by scim-im-agent package.
+ .
+ For more information about SCIM, please see the description of scim package.
+
+Package: scim-qt-immodule
+Architecture: any
+Multi-Arch: same
+Depends: scim (= ${binary:Version}), scim-im-agent (= ${binary:Version}),
+ ${shlibs:Depends}, ${misc:Depends}
+Provides: scim-bridge-client-qt4
+Conflicts: scim-bridge-client-qt, scim-bridge-client-qt4
+Enhances: scim
+Description: Qt input method module with SCIM as backend
+ SCIM (Smart Common Input Method) is an input method (IM) platform.
+ .
+ This package is the Qt native input method module for SCIM.  It provides
+ a Qt IM module for version 4 of Qt with SCIM as the input backend.
+ This input method module should work within all Qt platforms.
+ .
+ The Qt IM module communicates with SCIM backend through the IM agent
+ provided by scim-im-agent package.
+ .
+ For more information about SCIM, please see the description of scim package.
+
+Package: scim-qt5-immodule
+Architecture: any
+Multi-Arch: same
+Depends: libxcb-keysyms1, libqt5x11extras5, libqt5gui5, scim (= ${binary:Version}), scim-im-agent (= ${binary:Version}),
+ ${shlibs:Depends}, ${misc:Depends}
+Provides: scim-bridge-client-qt5
+Enhances: scim
+Description: Qt input method module with SCIM as backend
+ SCIM (Smart Common Input Method) is an input method (IM) platform.
+ .
+ This package is the Qt native input method module for SCIM.  It provides
+ a Qt IM module for version 5 of Qt with SCIM as the input backend.
+ This input method module should work within all Qt platforms.
+ .
+ The Qt IM module communicates with SCIM backend through the IM agent
+ provided by scim-im-agent package.
+ .
+ For more information about SCIM, please see the description of scim package.
+
+Package: scim-clutter-immodule
+Architecture: any
+Multi-Arch: same
+Depends: scim (= ${binary:Version}), scim-im-agent (= ${binary:Version}),
+ ${shlibs:Depends}, ${misc:Depends}
+Enhances: scim
+Description: Clutter input method module with SCIM as backend
+ SCIM (Smart Common Input Method) is an input method (IM) platform.
+ .
+ This package is the clutter native input method module for SCIM.  It provides
+ a clutter IM module for clutter-1.0 with SCIM as the input backend.
+ This input method module should work within all clutter platforms.
+ .
+ The clutter IM module communicates with SCIM backend through the IM agent
+ provided by scim-im-agent package.
+ .
+ For more information about SCIM, please see the description of scim package.
+
+Package: scim-im-agent
+Architecture: any
+Multi-Arch: foreign
+Depends: scim-modules-socket (= ${binary:Version}), ${shlibs:Depends}, ${misc:Depends}
+Provides: scim-bridge-agent
+Conflicts: scim-bridge-agent
+Enhances: scim
+Description: IM agent for SCIM platform
+ SCIM (Smart Common Input Method) is an input method (IM) platform.
+ .
+ This package provides the IM agent for SCIM. SCIM provides various IM modules
+ for Gtk/Qt/clutter program. The IM modules connumicate with SCIM through the
+ IM agent.
+ .
+ For more information about SCIM, please see the description of scim package.
+
+Package: scim-modules-socket
+Architecture: any
+Multi-Arch: same
+Depends: ${shlibs:Depends}, ${misc:Depends}
+Enhances: scim
+Description: socket modules for SCIM platform
+ SCIM (Smart Common Input Method) is an input method (IM) platform.
+ .
+ This package provides the socket modules for SCIM.  SCIM can use a local or
+ inet socket as the front end and connect to the configuration and IM engine
+ modules.  Then other computers and/or environments can share these input
+ methods by connecting to the socket with socket IM engine module and socket
+ configure module.
+ .
+ For more information about SCIM, please see the description of scim package.
+
+Package: scim-modules-ibus
+Architecture: any
+Multi-Arch: same
+Depends: libsystemd0, ${shlibs:Depends}, ${misc:Depends}
+Conflicts: ibus
+Enhances: scim
+Description: IBus portal modules for SCIM platform
+ SCIM (Smart Common Input Method) is an input method (IM) platform.
+ .
+ This package provides the IBus portal modules for SCIM.  SCIM can use IBus
+ portal interface as the front end and connect to with applications run in
+ flatpak.
+ .
+ For more information about SCIM, please see the description of scim package.
+
+Package: scim-dev
+Section: devel
+Architecture: all
+Depends: libscim-dev (>= ${source:Version}), scim-dev-doc (= ${source:Version}), ${misc:Depends}
+Description: development files for SCIM platform
+ SCIM (Smart Common Input Method) is an input method (IM) platform.
+ .
+ This package is a metapackage to provide development libraries and
+ documentations for SCIM platform.
+ .
+ For more information about SCIM, please see the description of scim package.
+
+Package: scim-dev-doc
+Section: doc
+Depends: ${misc:Depends}, libjs-jquery
+Architecture: all
+Description: development documentation for SCIM platform
+ SCIM (Smart Common Input Method) is an input method (IM) platform.
+ .
+ This package contains doxygen-generated HTML development documentation
+ for SCIM APIs.
+ .
+ For more information about SCIM and SCIM development, please see the
+ description of scim and scim-dev packages.

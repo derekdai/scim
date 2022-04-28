@@ -1,0 +1,36 @@
+#!/usr/bin/make -f
+export DH_VERBOSE=1
+export DH_OPTIONS=-v
+export DEB_HOST_MULTIARCH ?= $(shell dpkg-architecture -qDEB_HOST_MULTIARCH)
+
+%:
+	dh $@ --with autoreconf
+
+override_dh_autoreconf:
+	./bootstrap
+
+override_dh_auto_configure:
+	dh_auto_configure -- --enable-clutter-immodule --disable-qt4-immodule
+
+override_dh_auto_build:
+	$(MAKE) docs
+	rm -f docs/html/FreeSans.ttf
+	dh_auto_build
+
+override_dh_auto_install:
+	dh_auto_install
+	# empty the dependency_libs field in .la files (bug 591628)
+	find debian/tmp/usr/lib/ -name *.la -exec sed -i "/dependency_libs/ s/'.*'/''/" {} \;
+
+override_dh_installdocs:
+	dh_installdocs -X Makefile
+
+override_dh_install-arch:
+	dh_install
+	sed -i -e 's/@DEB_HOST_MULTIARCH@/$(DEB_HOST_MULTIARCH)/g' debian/scim/etc/X11/xinit/xinput.d/scim-immodule
+
+override_dh_makeshlibs:
+	dh_makeshlibs -p libscim8v5 -V "libscim8v5 (>= 1.4)"
+
+override_dh_shlibdeps:
+	dh_shlibdeps -l debian/libscim8v5/usr/lib -L libscim8v5
