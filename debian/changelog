@@ -1,3 +1,7 @@
+scim (1.4.21-0ubuntu1ppa1) unstable; urgency=medium
+  [ Derek Dai]
+  * fix build-time dependencies
+
 scim (1.4.20-0ubuntu1ppa1) unstable; urgency=medium
 
   [ Derek Dai]
