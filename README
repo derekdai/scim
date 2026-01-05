@@ -2,11 +2,29 @@ Source-derived documentation for developers is provided separately, courtesy
 of doxygen.  Look for scim-doc-$(VERSION).tar.gz on our website for download
 or browse online at http://oss.leggewie.org/scim/
 
-To compile scim from VCS, be sure to run the bootstrap script in the toplevel
-directory first.  To prepare a new tarball for release, adjust the values of
-the AC_INIT, SCIM_*_VERSION, SCIM_CURRENT and SCIM_REVISION variables in
-configure.ac as necessary.  Then run
-"./bootstrap && ./configure && make dist && make docs".
+To compile scim from VCS, we recommend using the Meson build system.
+
+1. Setup the build directory:
+   meson setup build
+
+2. Compile the project:
+   ninja -C build
+
+3. Install:
+   sudo ninja -C build install
+
+You can configure build options using:
+   meson configure build
+
+Common options include:
+   -Dprefix=/usr
+   -Dgtk2-immodule=true (Build GTK2 IMModule)
+   -Dgtk3-immodule=true (Build GTK3 IMModule)
+   -Dqt5-immodule=true  (Build QT5 IMModule)
+
+Legacy Autotools Build:
+To compile using Autotools, run the bootstrap script first:
+"./bootstrap && ./configure && make && sudo make install"
 
 The main program of SCIM is named scim. The usage of scim is:
 
