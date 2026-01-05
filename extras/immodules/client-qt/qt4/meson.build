@@ -18,7 +18,11 @@ if qt4_dep.found()
     '../scim-bridge-client-key-event-utility-qt.cpp'
   ]
 
-  qt4_im_moduledir = get_option('libdir') / 'qt4' / 'plugins' / 'inputmethods'
+  if get_option('qt4-im-module-dir') != ''
+      qt4_im_moduledir = get_option('qt4-im-module-dir')
+  else
+      qt4_im_moduledir = get_option('libdir') / 'qt4' / 'plugins' / 'inputmethods'
+  endif
 
   shared_module('im-scim',
     im_scim_qt4_sources + qt4_moc_sources,

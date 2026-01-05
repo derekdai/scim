@@ -1,6 +1,10 @@
 # extras/immodules/client-gtk/gtk3/meson.build
 if gtk3_dep.found()
-  gtk3_im_moduledir = gtk3_dep.get_variable(pkgconfig : 'immodulesdir', default_value : get_option('libdir') / 'gtk-3.0' / '3.0.0' / 'immodules')
+  if get_option('gtk3-im-module-dir') != ''
+      gtk3_im_moduledir = get_option('gtk3-im-module-dir')
+  else
+      gtk3_im_moduledir = gtk3_dep.get_variable(pkgconfig : 'immodulesdir', default_value : get_option('libdir') / 'gtk-3.0' / '3.0.0' / 'immodules')
+  endif
 
   im_scim_gtk3_sources = [
     '../im-scim-bridge-gtk.c',
