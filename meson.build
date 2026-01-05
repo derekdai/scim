@@ -1,0 +1,234 @@
+project('scim', ['c', 'cpp'],
+  version : '1.4.19',
+  default_options : ['warning_level=1', 'cpp_std=c++11', 'buildtype=debugoptimized'])
+
+scim_major_version = 1
+scim_minor_version = 4
+scim_micro_version = 19
+scim_version = '@0@.@1@.@2@'.format(scim_major_version, scim_minor_version, scim_micro_version)
+
+# Library versioning
+# increment if the interface has additions, changes, removals.
+scim_current = 10
+# increment any time the source changes; set to 0 if you increment CURRENT
+scim_revision = 7
+# increment if any interfaces have been added; set to 0
+# if any interfaces have been removed. removal has
+# precedence over adding, so set to 0 if both happened.
+scim_age = 2
+
+scim_epoch = '-1.0'
+scim_binary_version = '1.4.0'
+
+# Paths
+prefix = get_option('prefix')
+libdir = join_paths(prefix, get_option('libdir'))
+datadir = join_paths(prefix, get_option('datadir'))
+sysconfdir = join_paths(prefix, get_option('sysconfdir'))
+includedir = join_paths(prefix, get_option('includedir'))
+
+scim_datadir = join_paths(datadir, 'scim')
+scim_sysconfdir = sysconfdir
+scim_icondir = join_paths(scim_datadir, 'icons')
+scim_module_path = join_paths(libdir, 'scim' + scim_epoch)
+scim_libexecdir = join_paths(libdir, 'scim' + scim_epoch)
+scim_localedir = join_paths(datadir, 'locale')
+scim_tempdir = '/tmp'
+scim_prefix = prefix
+scim_libdir = libdir
+
+# Dependencies
+cc = meson.get_compiler('c')
+cxx = meson.get_compiler('cpp')
+
+dl_dep = cc.find_library('dl', required : false)
+ltdl_dep = cc.find_library('ltdl', required : false)
+if not ltdl_dep.found()
+  ltdl_proj = subproject('ltdl')
+  ltdl_dep = ltdl_proj.get_variable('ltdl_dep')
+endif
+
+# X11
+x11_dep = dependency('x11', required : get_option('frontend-x11'))
+
+# GTK
+gtk2_dep = dependency('gtk+-2.0', version : '>= 2.4.0', required : false)
+gtk3_dep = dependency('gtk+-3.0', version : '>= 3.0.0', required : false)
+gtk4_dep = dependency('gtk4', version : '>= 4.0.0', required : false)
+pango_dep = dependency('pango', version : '>= 1.1.0', required : false)
+gdk_pixbuf_dep = dependency('gdk-pixbuf-2.0', version : '>= 2.4.0', required : false)
+
+# QT
+qt3_dep = dependency('qt-mt', version : '>= 3.3', required : false)
+qt4_dep = dependency('QtGui', version : '>= 4.0', required : false)
+qt5_dep = dependency('Qt5Core', version : '>= 5.0', required : false)
+if qt5_dep.found()
+  qt5_widgets_dep = dependency('Qt5Widgets', required : false)
+  qt5_x11extras_dep = dependency('Qt5X11Extras', required : false)
+endif
+
+# Other deps
+gthread_dep = dependency('gthread-2.0', version : '>= 2.0.0', required : false)
+libsystemd_dep = dependency('libsystemd', version : '>= 245', required : false)
+dbus_dep = dependency('dbus-1', required : false)
+clutter_dep = dependency('clutter-1.0', required : false)
+clutter_imcontext_dep = dependency('clutter-imcontext-0.1', required : false)
+
+# config.h generation
+conf_data = configuration_data()
+conf_data.set_quoted('SCIM_VERSION', scim_version)
+conf_data.set('SCIM_MAJOR_VERSION', scim_major_version)
+conf_data.set('SCIM_MINOR_VERSION', scim_minor_version)
+conf_data.set('SCIM_MICRO_VERSION', scim_micro_version)
+conf_data.set_quoted('SCIM_BINARY_VERSION', scim_binary_version)
+conf_data.set_quoted('GETTEXT_PACKAGE', 'scim')
+
+# Check headers and functions
+check_headers = [
+  'langinfo.h', 'libintl.h', 'string.h', 'dirent.h', 'hash_map', 'ext/hash_map',
+  'stdint.h', 'unistd.h'
+]
+
+foreach h : check_headers
+  if cc.has_header(h)
+    conf_data.set('HAVE_' + h.underscorify().to_upper(), 1)
+  endif
+endforeach
+
+check_funcs = [
+  'gettimeofday', 'memmove', 'memset', 'nl_langinfo', 'setlocale', 'daemon',
+  'opendir', 'closedir', 'readdir', 'usleep', 'nanosleep'
+]
+
+foreach f : check_funcs
+  if cc.has_function(f)
+    conf_data.set('HAVE_' + f.to_upper(), 1)
+  endif
+endforeach
+
+# Socket checks
+if cc.has_function('socket') and cc.has_function('bind') and cc.has_function('accept') and cc.has_function('connect') and cc.has_function('listen')
+  socket_ok = true
+else
+  socket_ok = false
+endif
+
+# Feature options logic (simplified for now, mimicking configure.ac)
+enable_debug = get_option('buildtype').startswith('debug')
+if enable_debug
+  conf_data.set('ENABLE_DEBUG', 1)
+endif
+
+# ICONV check
+# We hardcode ICONV_CONST to empty because the system iconv.h declares it as char**
+# and the detection logic is unreliable or C++ strictness is interfering.
+conf_data.set('ICONV_CONST', '')
+
+enable_hash_map = get_option('hash-map')
+if enable_hash_map
+  conf_data.set('ENABLE_HASH_MAP', 1)
+endif
+
+# Tray icon logic
+enable_tray_icon = false
+if (gtk2_dep.found() or gtk3_dep.found() or gtk4_dep.found()) and x11_dep.found()
+  enable_tray_icon = true
+  conf_data.set('ENABLE_TRAY_ICON', 1)
+endif
+
+# Generate scim_types.h
+scim_types_data = configuration_data()
+if cc.has_header('stdint.h')
+  scim_types_data.set('INCLUDE_STDINT', '#include <stdint.h>')
+  scim_types_data.set('UINT16', 'uint16_t')
+  scim_types_data.set('UINT32', 'uint32_t')
+  scim_types_data.set('UINT64', 'uint64_t')
+else
+  scim_types_data.set('INCLUDE_STDINT', '//#include <stdint.h>')
+  scim_types_data.set('UINT16', 'unsigned short int')
+  if cc.sizeof('unsigned int') == 4
+    scim_types_data.set('UINT32', 'unsigned int')
+  elif cc.sizeof('unsigned long int') == 4
+     scim_types_data.set('UINT32', 'unsigned long int')
+  endif
+  # Approximation for UINT64 if stdint missing (rare nowadays)
+  scim_types_data.set('UINT64', 'unsigned long long int')
+endif
+
+configure_file(
+  input : 'src/scim_types.h.in',
+  output : 'scim_types.h',
+  configuration : scim_types_data,
+  install : true,
+  install_dir : join_paths(includedir, 'scim' + scim_epoch)
+)
+
+configure_file(output : 'config.h', configuration : conf_data)
+
+# Include directories
+inc = include_directories('.', 'src')
+
+# Subdirectories
+subdir('src')
+subdir('utils')
+subdir('modules')
+subdir('extras')
+subdir('data')
+subdir('configs')
+subdir('po')
+
+# Pkg-config generation
+pkg = import('pkgconfig')
+
+# scim.pc
+pkg.generate(
+  libscim,
+  name : 'SCIM',
+  description : 'Smart Common Input Method platform',
+  version : scim_version,
+  filebase : 'scim',
+  subdirs : 'scim' + scim_epoch,
+  variables : [
+    'scimdatadir=' + join_paths(get_option('prefix'), get_option('datadir'), 'scim'),
+    'icondir=' + join_paths(get_option('prefix'), get_option('datadir'), 'scim', 'icons'),
+    'moduledir=' + join_paths(get_option('prefix'), get_option('libdir'), 'scim' + scim_epoch, scim_binary_version),
+    'scim_binary_version=' + scim_binary_version
+  ]
+)
+
+# scim-gtkutils.pc
+if is_variable('libscim_gtkutils')
+  pkg.generate(
+    libscim_gtkutils,
+    name : 'SCIM GTK Utils',
+    description : 'SCIM GTK Utility Library',
+    version : scim_version,
+    filebase : 'scim-gtkutils',
+    subdirs : 'scim' + scim_epoch,
+    requires : [libscim]
+  )
+endif
+
+# scim.spec generation
+cdata = configuration_data()
+cdata.set('SCIM_VERSION', scim_version)
+cdata.set('SCIM_EPOCH', scim_epoch)
+cdata.set('SCIM_BINARY_VERSION', scim_binary_version)
+configure_file(
+  input : 'scim.spec.in',
+  output : 'scim.spec',
+  configuration : cdata
+)
+
+# scim-x11utils.pc
+if is_variable('libscim_x11utils')
+  pkg.generate(
+    libscim_x11utils,
+    name : 'SCIM X11 Utils',
+    description : 'SCIM X11 Utility Library',
+    version : scim_version,
+    filebase : 'scim-x11utils',
+    subdirs : 'scim' + scim_epoch,
+    requires : [libscim]
+  )
+endif
