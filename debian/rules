@@ -4,23 +4,24 @@ export DH_OPTIONS=-v
 export DEB_HOST_MULTIARCH ?= $(shell dpkg-architecture -qDEB_HOST_MULTIARCH)
 
 %:
-	dh $@ --with autoreconf
-
-override_dh_autoreconf:
-	./bootstrap
+	dh $@ --buildsystem=meson
 
 override_dh_auto_configure:
-	dh_auto_configure -- --enable-clutter-immodule --disable-qt4-immodule
+	dh_auto_configure -- -Dclutter-immodule=true -Dqt4-immodule=false
 
 override_dh_auto_build:
-	$(MAKE) docs
-	rm -f docs/html/FreeSans.ttf
 	dh_auto_build
+	# meson builds docs if enabled, but let's check if we need extra steps
+	# $(MAKE) docs - previous makefile step
+	# If meson builds everything, we might not need this.
+	# But if we need to clean up fonts:
+	rm -f docs/html/FreeSans.ttf
 
 override_dh_auto_install:
 	dh_auto_install
 	# empty the dependency_libs field in .la files (bug 591628)
-	find debian/tmp/usr/lib/ -name *.la -exec sed -i "/dependency_libs/ s/'.*'/''/" {} \;
+	# Meson does not produce .la files usually, so this might be redundant but harmless if files don't exist
+	# find debian/tmp/usr/lib/ -name *.la -exec sed -i "/dependency_libs/ s/'.*'/''/" {} \;
 
 override_dh_installdocs:
 	dh_installdocs -X Makefile

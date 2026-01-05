@@ -3,7 +3,7 @@ if get_option('im-rawcode')
     'scim_rawcode_imengine.cpp',
     dependencies: [libscim_dep],
     install: true,
-    install_dir: join_paths(scim_module_path, 'IMEngine'),
+    install_dir: join_paths(scim_module_path, scim_binary_version, 'IMEngine'),
     name_prefix: '',
     cpp_args: [
       '-DSCIM_DATADIR="@0@"'.format(scim_datadir),
@@ -22,7 +22,7 @@ if get_option('im-socket') and socket_ok
     'scim_socket_imengine.cpp',
     dependencies: [libscim_dep],
     install: true,
-    install_dir: join_paths(scim_module_path, 'IMEngine'),
+    install_dir: join_paths(scim_module_path, scim_binary_version, 'IMEngine'),
     name_prefix: '',
     cpp_args: [
       '-DSCIM_DATADIR="@0@"'.format(scim_datadir),

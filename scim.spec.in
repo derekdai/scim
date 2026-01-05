@@ -46,6 +46,8 @@ BuildRequires:  XFree86-devel >= 4.1.0
 %endif
 
 BuildRequires:  pkgconfig >= 0.12
+BuildRequires:  meson
+BuildRequires:  ninja-build
 
 %description
 SCIM is a developing platform to significant reduce the difficulty of 
@@ -71,43 +73,56 @@ scim.
 %setup -n %{name}-%{version}
 
 %build
-CFLAGS="-O3" CXXFLAGS="-O3" \
-%configure \
+export CFLAGS="${CFLAGS:--O3}"
+export CXXFLAGS="${CXXFLAGS:--O3}"
+
+meson setup build \
+    --prefix=%{_prefix} \
+    --libdir=%{_libdir} \
+    --libexecdir=%{_libexecdir} \
+    --bindir=%{_bindir} \
+    --sbindir=%{_sbindir} \
+    --includedir=%{_includedir} \
+    --datadir=%{_datadir} \
+    --mandir=%{_mandir} \
+    --sysconfdir=%{_sysconfdir} \
+    --localedir=%{_datadir}/locale \
+    --wrap-mode=nodownload \
 %if ! %{build_config_socket}
-  --disable-config-socket \
+  -Dconfig-socket=false \
 %endif
 %if ! %{build_config_simple}
-  --disable-config-simple \
+  -Dconfig-simple=false \
 %endif
 %if ! %{build_frontend_x11}
-  --disable-frontend-x11 \
+  -Dfrontend-x11=false \
 %endif
 %if ! %{build_frontend_socket}
-  --disable-frontend-socket \
+  -Dfrontend-socket=false \
 %endif
 %if ! %{build_imengine_rawcode}
-  --disable-im-rawcode \
+  -Dim-rawcode=false \
 %endif
 %if ! %{build_imengine_socket}
-  --disable-im-socket \
+  -Dim-socket=false \
 %endif
 %if ! %{build_filter_sctc}
-  --disable-filter-sctc \
+  -Dfilter-sctc=false \
 %endif
 %if ! %{build_gtk2_immodule}
-  --disable-gtk2-immodule \
+  -Dgtk2-immodule=false \
 %endif
 %if ! %{build_scim_setup}
-  -disable-setup-ui \
+  -Dsetup-ui=false \
 %endif
+  -Dgtk2-im-module-dir=@GTK_LIBDIR@/gtk-2.0/immodules
 
-
-make 
+meson compile -C build %{?_smp_mflags}
 
 %install
 [ -n "$RPM_BUILD_ROOT" -a "$RPM_BUILD_ROOT" != / ] && rm -rf $RPM_BUILD_ROOT
 
-make DESTDIR=${RPM_BUILD_ROOT} install
+meson install -C build --destdir $RPM_BUILD_ROOT
 
 mkdir -p ${RPM_BUILD_ROOT}/%{_libdir}/scim@SCIM_EPOCH@/{Config,FrontEnd,IMEngine,SetupUI,Helper,Filter}
 
@@ -369,4 +384,3 @@ gtk-query-immodules-2.0 > %{_sysconfdir}/gtk-2.0/gtk.immodules
 
 * Sat Jun 22 2002 James Su <suzhe@turbolinux.com.cn>
 - first public release of SCIM.
-
