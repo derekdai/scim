@@ -29,7 +29,11 @@ if qt3_dep.found()
     '../scim-bridge-client-key-event-utility-qt.cpp'
   ]
 
-  qt3_im_moduledir = get_option('libdir') / 'qt3' / 'plugins' / 'inputmethods' # Default guess
+  if get_option('qt3-im-module-dir') != ''
+      qt3_im_moduledir = get_option('qt3-im-module-dir')
+  else
+      qt3_im_moduledir = get_option('libdir') / 'qt3' / 'plugins' / 'inputmethods'
+  endif
 
   shared_module('im-scim',
     im_scim_qt3_sources + qt3_moc_sources,

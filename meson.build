@@ -83,6 +83,12 @@ conf_data.set('SCIM_MICRO_VERSION', scim_micro_version)
 conf_data.set_quoted('SCIM_BINARY_VERSION', scim_binary_version)
 conf_data.set_quoted('GETTEXT_PACKAGE', 'scim')
 
+# SCIM Bridge Version
+conf_data.set_quoted('SCIM_BRIDGE_VERSION', scim_version)
+conf_data.set('SCIM_BRIDGE_MAJOR_VERSION', scim_major_version)
+conf_data.set('SCIM_BRIDGE_MINOR_VERSION', scim_minor_version)
+conf_data.set('SCIM_BRIDGE_MICRO_VERSION', scim_micro_version)
+
 # Check headers and functions
 check_headers = [
   'langinfo.h', 'libintl.h', 'string.h', 'dirent.h', 'hash_map', 'ext/hash_map',
@@ -94,6 +100,30 @@ foreach h : check_headers
     conf_data.set('HAVE_' + h.underscorify().to_upper(), 1)
   endif
 endforeach
+
+# Strict size checks
+if not cc.has_type('size_t', prefix : '#include <stddef.h>')
+    error('No type size_t, but SCIM needs it!')
+endif
+
+sizeof_char = cc.sizeof('char')
+sizeof_short = cc.sizeof('unsigned short int')
+
+if sizeof_short != 2 or sizeof_char != 1
+  error('''
+*** SCIM requires
+***      sizeof (unsigned short int)  == 2
+***      sizeof (char)                == 1
+*** You might want to consider using the GNU C compiler.
+''')
+endif
+
+if cc.sizeof('wchar_t', prefix: '#include <wchar.h>') == 0
+  error('''
+*** SCIM requires a compiler that supports wchar_t,
+*** You might want to consider using the GNU C compiler.
+''')
+endif
 
 check_funcs = [
   'gettimeofday', 'memmove', 'memset', 'nl_langinfo', 'setlocale', 'daemon',
@@ -110,6 +140,8 @@ endforeach
 if cc.has_function('socket') and cc.has_function('bind') and cc.has_function('accept') and cc.has_function('connect') and cc.has_function('listen')
   socket_ok = true
 else
+  # Check if we need -lsocket -lnsl etc? For now assuming simple check.
+  # configure.ac checks for gethostbyname etc as well.
   socket_ok = false
 endif
 
@@ -150,9 +182,15 @@ else
     scim_types_data.set('UINT32', 'unsigned int')
   elif cc.sizeof('unsigned long int') == 4
      scim_types_data.set('UINT32', 'unsigned long int')
+  else
+     error('*** No suitable integer type for uint32 found.')
   endif
-  # Approximation for UINT64 if stdint missing (rare nowadays)
-  scim_types_data.set('UINT64', 'unsigned long long int')
+
+  if cc.sizeof('unsigned long long int') == 8
+    scim_types_data.set('UINT64', 'unsigned long long int')
+  else
+    error('*** No suitable integer type for uint64 found.')
+  endif
 endif
 
 configure_file(
@@ -217,17 +255,6 @@ if is_variable('libscim_gtkutils')
   )
 endif
 
-# scim.spec generation
-cdata = configuration_data()
-cdata.set('SCIM_VERSION', scim_version)
-cdata.set('SCIM_EPOCH', scim_epoch)
-cdata.set('SCIM_BINARY_VERSION', scim_binary_version)
-configure_file(
-  input : 'scim.spec.in',
-  output : 'scim.spec',
-  configuration : cdata
-)
-
 # scim-x11utils.pc
 if is_variable('libscim_x11utils')
   pkg.generate(
@@ -240,3 +267,55 @@ if is_variable('libscim_x11utils')
     requires : [libscim]
   )
 endif
+
+# scim.spec generation
+cdata = configuration_data()
+cdata.set('PACKAGE', 'scim')
+cdata.set('VERSION', scim_version)
+cdata.set('SCIM_VERSION', scim_version)
+cdata.set('SCIM_EPOCH', scim_epoch)
+cdata.set('SCIM_BINARY_VERSION', scim_binary_version)
+
+# Default to 0 for these variables, they need actual logic if we want perfection, but
+# matching configure.ac defaults/results is key.
+# In configure.ac these are usually 0 or 1.
+
+cdata.set('SCIM_BUILD_CONFIG_SOCKET', get_option('config-socket') ? 1 : 0)
+cdata.set('SCIM_BUILD_CONFIG_SIMPLE', get_option('config-simple') ? 1 : 0)
+cdata.set('SCIM_BUILD_FRONTEND_X11', get_option('frontend-x11') ? 1 : 0)
+cdata.set('SCIM_BUILD_FRONTEND_SOCKET', get_option('frontend-socket') ? 1 : 0)
+cdata.set('SCIM_BUILD_IMENGINE_RAWCODE', get_option('im-rawcode') ? 1 : 0)
+cdata.set('SCIM_BUILD_IMENGINE_SOCKET', get_option('im-socket') ? 1 : 0)
+cdata.set('SCIM_BUILD_GTK2_IMMODULE', get_option('gtk2-immodule') ? 1 : 0)
+cdata.set('SCIM_BUILD_SCIM_SETUP', get_option('setup-ui') ? 1 : 0)
+
+# These need more complex logic to match exactly what was built, but using options is a good approximation
+cdata.set('SCIM_BUILD_PANEL_GTK', get_option('panel-gtk').enabled() or (get_option('panel-gtk').auto() and gtk2_dep.found()) ? 1 : 0)
+
+# Logic for GTK utils (built if panel or setup-ui is built and gtk exists)
+build_gtk_utils = (get_option('panel-gtk').enabled() or (get_option('panel-gtk').auto() and gtk2_dep.found()) or get_option('setup-ui')) and (gtk2_dep.found() or gtk3_dep.found())
+cdata.set('SCIM_BUILD_GTK_UTILS', build_gtk_utils ? 1 : 0)
+
+# Logic for X11 utils (built if frontend-x11 and x11 exists)
+cdata.set('SCIM_BUILD_X11_UTILS', get_option('frontend-x11') and x11_dep.found() ? 1 : 0)
+
+cdata.set('SCIM_BUILD_FILTER_SCTC', get_option('filter-sctc') ? 1 : 0)
+
+# GTK Version logic for spec
+gtk_version = '2.0.0' # Default
+gtk_libdir = libdir
+if gtk3_dep.found()
+    gtk_version = gtk3_dep.version()
+    gtk_libdir = gtk3_dep.get_variable(pkgconfig : 'libdir')
+elif gtk2_dep.found()
+    gtk_version = gtk2_dep.version()
+    gtk_libdir = gtk2_dep.get_variable(pkgconfig : 'libdir')
+endif
+cdata.set('GTK_VERSION', gtk_version)
+cdata.set('GTK_LIBDIR', gtk_libdir)
+
+configure_file(
+  input : 'scim.spec.in',
+  output : 'scim.spec',
+  configuration : cdata
+)

@@ -1,7 +1,12 @@
 # extras/immodules/client-gtk/gtk2/meson.build
 if gtk2_dep.found()
-  # Use default path if pkg-config variable is not found
-  gtk2_im_moduledir = gtk2_dep.get_variable(pkgconfig : 'immodulesdir', default_value : get_option('libdir') / 'gtk-2.0' / '2.10.0' / 'immodules')
+  # Check for override option first
+  if get_option('gtk2-im-module-dir') != ''
+    gtk2_im_moduledir = get_option('gtk2-im-module-dir')
+  else
+    # Use default path if pkg-config variable is not found
+    gtk2_im_moduledir = gtk2_dep.get_variable(pkgconfig : 'immodulesdir', default_value : get_option('libdir') / 'gtk-2.0' / '2.10.0' / 'immodules')
+  endif
 
   im_scim_gtk2_sources = [
     '../im-scim-bridge-gtk.c',

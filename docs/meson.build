@@ -19,7 +19,7 @@ if get_option('documents')
     cdata = configuration_data()
     cdata.set('PACKAGE', 'scim')
     cdata.set('VERSION', scim_version)
-    cdata.set('top_srcdir', meson.source_root())
+    cdata.set('top_srcdir', meson.project_source_root())
     if perl.found()
         cdata.set('PERL', perl.path())
     else
@@ -51,15 +51,10 @@ if get_option('documents')
 
   # Manual generation
   xsltproc = find_program('xsltproc', required : false)
-  # Basic check for docbook xsl, mimicking configure.ac partially
-  # In a real scenario we might need more robust checking or options
 
   if xsltproc.found()
-      # Check for one of the style sheets
-      # We just check a common location or assume if xsltproc is there user knows what they are doing
-      # or we can try to find the file
-
       docbook_xsl = ''
+      # Mimic configure.ac path checking
       check_paths = [
         '/usr/share/sgml/docbook/xsl-stylesheets/html/tldp-html.xsl',
         '/usr/share/sgml/docbook/xsl-stylesheets/html/docbook.xsl',

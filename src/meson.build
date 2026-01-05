@@ -89,13 +89,23 @@ add_project_arguments('-DHAVE_CONFIG_H', language : 'cpp')
 # Find libintl
 intl_dep = cc.find_library('intl', required : false)
 
+link_args = []
+if get_option('ld-version-script')
+  link_args += '-Wl,--version-script=' + meson.current_source_dir() + '/libscim.version-script'
+endif
+
+# ltdladvise handling is mostly about how modules are loaded, which affects source code,
+# but if it implies linking flags, we would add them here.
+# configure.ac just defines SCIM_LTDLADVISE in config.h.
+
 libscim = shared_library('scim' + scim_epoch,
   libscim_sources,
   dependencies : [dl_dep, ltdl_dep, intl_dep],
   version : '@0@.@1@.@2@'.format(scim_current, scim_revision, scim_age),
   soversion : scim_current,
   install : true,
-  include_directories : inc
+  include_directories : inc,
+  link_args : link_args
 )
 
 libscim_dep = declare_dependency(
