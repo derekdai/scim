@@ -3,7 +3,7 @@ if get_option('filter-sctc')
     'scim_sctc_filter.cpp',
     dependencies: [libscim_dep],
     install: true,
-    install_dir: join_paths(scim_module_path, 'Filter'),
+    install_dir: join_paths(scim_module_path, scim_binary_version, 'Filter'),
     name_prefix: '',
     cpp_args: [
       '-DSCIM_DATADIR="@0@"'.format(scim_datadir),
