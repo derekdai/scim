@@ -1,10 +1,27 @@
 # extras/immodules/client-gtk/gtk4/meson.build
-gtk4_im_moduledir = get_option('libdir') / 'gtk-4.0' / '4.0.0' / 'immodules'
+if gtk4_dep.found()
+  gtk4_im_moduledir = gtk4_dep.get_variable(pkgconfig : 'immodulesdir', default_value : get_option('libdir') / 'gtk-4.0' / '4.0.0' / 'immodules')
 
-shared_module('im-scim-bridge',
-  'scim-bridge-client-immodule-gtk.c',
-  dependencies : [libscim_bridge_client_common_dep, gtk4_dep],
-  install : true,
-  install_dir : gtk4_im_moduledir,
-  c_args : '-DSCIM_BRIDGE_GTK_IMMODULE_GTK4'
-)
+  im_scim_gtk4_sources = [
+    '../im-scim-bridge-gtk.c',
+    '../scim-bridge-client-gtk.c',
+    '../scim-bridge-client-imcontext-gtk.c',
+    '../scim-bridge-client-key-event-utility-gtk.c'
+  ]
+
+  shared_module('im-scim',
+    im_scim_gtk4_sources,
+    dependencies : [
+      libscim_bridge_common_dep,
+      libscim_bridge_client_common_dep,
+      gtk4_dep,
+      x11_dep
+    ],
+    include_directories : [
+      include_directories('../../common'),
+      include_directories('../../client-common')
+    ],
+    install : true,
+    install_dir : gtk4_im_moduledir
+  )
+endif

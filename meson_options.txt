@@ -19,3 +19,5 @@ option('qt5-immodule', type : 'boolean', value : true, description : 'Build QT5 
 option('clutter-immodule', type : 'boolean', value : false, description : 'Build CLUTTER IMModule')
 option('panel-gtk', type : 'feature', value : 'auto', description : 'Build GTK Panel')
 option('setup-ui', type : 'boolean', value : true, description : 'Build Setup UI')
+option('tests', type : 'boolean', value : false, description : 'Build tests')
+option('documents', type : 'boolean', value : false, description : 'Build documents')
