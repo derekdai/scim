@@ -1,34 +1,31 @@
 #!/usr/bin/make -f
 export DH_VERBOSE=1
-export DH_OPTIONS=-v
 export DEB_HOST_MULTIARCH ?= $(shell dpkg-architecture -qDEB_HOST_MULTIARCH)
 
 %:
 	dh $@ --buildsystem=meson
 
 override_dh_auto_configure:
-	dh_auto_configure -- -Dclutter-immodule=true -Dqt4-immodule=false
-
-override_dh_auto_build:
-	dh_auto_build
-	# meson builds docs if enabled, but let's check if we need extra steps
-	# $(MAKE) docs - previous makefile step
-	# If meson builds everything, we might not need this.
-	# But if we need to clean up fonts:
-	rm -f docs/html/FreeSans.ttf
+	dh_auto_configure -- \
+		-Dgtk2-immodule=true \
+		-Dgtk3-immodule=true \
+		-Dclutter-immodule=true \
+		-Dqt3-immodule=false \
+		-Dqt4-immodule=false \
+		-Dqt5-immodule=true
 
 override_dh_auto_install:
 	dh_auto_install
-	# empty the dependency_libs field in .la files (bug 591628)
-	# Meson does not produce .la files usually, so this might be redundant but harmless if files don't exist
-	# find debian/tmp/usr/lib/ -name *.la -exec sed -i "/dependency_libs/ s/'.*'/''/" {} \;
-
-override_dh_installdocs:
-	dh_installdocs -X Makefile
+	# empty the dependency_libs field in .la files if any (Meson doesn't usually generate them, but kept for safety if wrappers do)
+	find debian/tmp/usr/lib/ -name *.la -exec sed -i "/dependency_libs/ s/'.*'/''/" {} \; || true
 
 override_dh_install-arch:
 	dh_install
-	sed -i -e 's/@DEB_HOST_MULTIARCH@/$(DEB_HOST_MULTIARCH)/g' debian/scim/etc/X11/xinit/xinput.d/scim-immodule
+	# Adjust path for xinput script if needed, or ensure it is installed correctly
+	# meson install should handle most, but we might need to sed the file
+	if [ -f debian/scim/etc/X11/xinit/xinput.d/scim-immodule ]; then \
+		sed -i -e 's/@DEB_HOST_MULTIARCH@/$(DEB_HOST_MULTIARCH)/g' debian/scim/etc/X11/xinit/xinput.d/scim-immodule; \
+	fi
 
 override_dh_makeshlibs:
 	dh_makeshlibs -p libscim8v5 -V "libscim8v5 (>= 1.4)"

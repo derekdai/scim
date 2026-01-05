@@ -1,14 +1,8 @@
-inst_icons = [
-  'pin-up.png', 'pin-down.png', 'full-letter.png', 'half-letter.png',
-  'full-punct.png', 'half-punct.png', 'setup.png', 'help.png',
-  'up.png', 'down.png', 'left.png', 'right.png', 'trademark.png',
-  'rawcode.png', 'keyboard.png', 'menu.png'
+icons = [
+  'down.png', 'full-letter.png', 'full-punct.png', 'half-letter.png',
+  'half-punct.png', 'help.png', 'keyboard.png', 'left.png', 'menu.png',
+  'pin-down.png', 'pin-up.png', 'rawcode.png', 'right.png',
+  'sctc-sc-to-tc.png', 'sctc-tc-to-sc.png', 'sctc.png', 'setup.png',
+  'trademark.png', 'up.png'
 ]
-
-sctc_filter_icons = ['sctc.png', 'sctc-sc-to-tc.png', 'sctc-tc-to-sc.png']
-
-install_data(inst_icons, install_dir: scim_icondir)
-
-if get_option('filter-sctc')
-  install_data(sctc_filter_icons, install_dir: scim_icondir)
-endif
+install_data(icons, install_dir : scim_icondir)

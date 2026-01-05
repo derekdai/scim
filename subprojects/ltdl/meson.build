@@ -1,15 +1,9 @@
-project('ltdl', 'c', version: '2.4.6')
+project('ltdl', 'c')
 
 ltdl_inc = include_directories('.')
-
-libltdl = library('ltdl',
-  'ltdl.c',
-  include_directories: ltdl_inc,
-  version: '7.3.1',
-  install: false
-)
+ltdl_lib = static_library('ltdl', 'ltdl.c')
 
 ltdl_dep = declare_dependency(
-  link_with: libltdl,
-  include_directories: ltdl_inc
+  link_with : ltdl_lib,
+  include_directories : ltdl_inc
 )

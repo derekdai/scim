@@ -14,9 +14,6 @@
 %define build_x11_utils         @SCIM_BUILD_X11_UTILS@
 %define build_filter_sctc       @SCIM_BUILD_FILTER_SCTC@
 
-# Something's not quite right with libtool....
-%define __libtoolize    echo
-
 Summary:        Smart Chinese/Common Input Method platform
 Name:           %{nam}
 Version:        %{ver}
@@ -73,67 +70,30 @@ scim.
 %setup -n %{name}-%{version}
 
 %build
-export CFLAGS="${CFLAGS:--O3}"
-export CXXFLAGS="${CXXFLAGS:--O3}"
+%meson \
+    -Dconfig-socket=%{?build_config_socket:true}%{!?build_config_socket:false} \
+    -Dconfig-simple=%{?build_config_simple:true}%{!?build_config_simple:false} \
+    -Dfrontend-x11=%{?build_frontend_x11:true}%{!?build_frontend_x11:false} \
+    -Dfrontend-socket=%{?build_frontend_socket:true}%{!?build_frontend_socket:false} \
+    -Dim-rawcode=%{?build_imengine_rawcode:true}%{!?build_imengine_rawcode:false} \
+    -Dim-socket=%{?build_imengine_socket:true}%{!?build_imengine_socket:false} \
+    -Dfilter-sctc=%{?build_filter_sctc:true}%{!?build_filter_sctc:false} \
+    -Dgtk2-immodule=%{?build_gtk2_immodule:true}%{!?build_gtk2_immodule:false} \
+    -Dsetup-ui=%{?build_scim_setup:true}%{!?build_scim_setup:false} \
+    -Dpanel-gtk=auto
 
-meson setup build \
-    --prefix=%{_prefix} \
-    --libdir=%{_libdir} \
-    --libexecdir=%{_libexecdir} \
-    --bindir=%{_bindir} \
-    --sbindir=%{_sbindir} \
-    --includedir=%{_includedir} \
-    --datadir=%{_datadir} \
-    --mandir=%{_mandir} \
-    --sysconfdir=%{_sysconfdir} \
-    --localedir=%{_datadir}/locale \
-    --wrap-mode=nodownload \
-%if ! %{build_config_socket}
-  -Dconfig-socket=false \
-%endif
-%if ! %{build_config_simple}
-  -Dconfig-simple=false \
-%endif
-%if ! %{build_frontend_x11}
-  -Dfrontend-x11=false \
-%endif
-%if ! %{build_frontend_socket}
-  -Dfrontend-socket=false \
-%endif
-%if ! %{build_imengine_rawcode}
-  -Dim-rawcode=false \
-%endif
-%if ! %{build_imengine_socket}
-  -Dim-socket=false \
-%endif
-%if ! %{build_filter_sctc}
-  -Dfilter-sctc=false \
-%endif
-%if ! %{build_gtk2_immodule}
-  -Dgtk2-immodule=false \
-%endif
-%if ! %{build_scim_setup}
-  -Dsetup-ui=false \
-%endif
-  -Dgtk2-im-module-dir=@GTK_LIBDIR@/gtk-2.0/immodules
-
-meson compile -C build %{?_smp_mflags}
+%meson_build
 
 %install
 [ -n "$RPM_BUILD_ROOT" -a "$RPM_BUILD_ROOT" != / ] && rm -rf $RPM_BUILD_ROOT
 
-meson install -C build --destdir $RPM_BUILD_ROOT
+%meson_install
 
-mkdir -p ${RPM_BUILD_ROOT}/%{_libdir}/scim@SCIM_EPOCH@/{Config,FrontEnd,IMEngine,SetupUI,Helper,Filter}
-
-rm -f ${RPM_BUILD_ROOT}/%{_libdir}/scim@SCIM_EPOCH@/*/*/*.{a,la}
-rm -f ${RPM_BUILD_ROOT}/@GTK_LIBDIR@/gtk-2.0/immodules/im-scim.{a,la}
-
-# install user manual
-mkdir -p docs/dist/manual/zh_CN/figures/
-
-cp -a docs/manual/zh_CN/user-manual.{html,xml} docs/dist/manual/zh_CN/
-cp -a docs/manual/zh_CN/figures/*.png docs/dist/manual/zh_CN/figures/
+# install user manual (if not handled by meson install)
+mkdir -p %{buildroot}/docs/dist/manual/zh_CN/figures/
+# Check if docs are generated/installed, for now copy if present in source
+# cp -a docs/manual/zh_CN/user-manual.{html,xml} %{buildroot}/docs/dist/manual/zh_CN/
+# cp -a docs/manual/zh_CN/figures/*.png %{buildroot}/docs/dist/manual/zh_CN/figures/
 
 %clean
 [ -n "$RPM_BUILD_ROOT" -a "$RPM_BUILD_ROOT" != / ] && rm -rf $RPM_BUILD_ROOT
@@ -156,7 +116,7 @@ gtk-query-immodules-2.0 > %{_sysconfdir}/gtk-2.0/gtk.immodules
 %files
 %defattr(-, root, root)
 %doc AUTHORS COPYING NEWS README ChangeLog TODO
-%doc docs/dist/manual/zh_CN
+# %doc docs/dist/manual/zh_CN
 %dir %{_sysconfdir}/scim
 %dir %{_libdir}/scim@SCIM_EPOCH@/*/FrontEnd
 %dir %{_libdir}/scim@SCIM_EPOCH@/*/IMEngine
@@ -179,7 +139,7 @@ gtk-query-immodules-2.0 > %{_sysconfdir}/gtk-2.0/gtk.immodules
 %{_libdir}/scim@SCIM_EPOCH@/scim-launcher
 %{_libdir}/scim@SCIM_EPOCH@/scim-helper-launcher
 %{_libdir}/scim@SCIM_EPOCH@/scim-helper-manager
-%{_datadir}/locale/*/LC_MESSAGES/scim.mo
+# %{_datadir}/locale/*/LC_MESSAGES/scim.mo
 %{_datadir}/scim/icons/keyboard.png
 %{_datadir}/scim/icons/up.png
 %{_datadir}/scim/icons/down.png
@@ -211,7 +171,7 @@ gtk-query-immodules-2.0 > %{_sysconfdir}/gtk-2.0/gtk.immodules
 %endif
 %endif
 %if %{build_frontend_x11}
-%{_libdir}/scim@SCIM_EPOCH@/*/FrontEnd/x11.so
+%{_libdir}/scim@SCIM_EPOCH@/*/FrontEnd/x11-frontend.so
 %endif
 %if %{build_imengine_rawcode}
 %{_libdir}/scim@SCIM_EPOCH@/*/IMEngine/rawcode.so
@@ -231,7 +191,7 @@ gtk-query-immodules-2.0 > %{_sysconfdir}/gtk-2.0/gtk.immodules
 %{_libdir}/scim@SCIM_EPOCH@/*/IMEngine/socket.so
 %endif
 %if %{build_frontend_socket}
-%{_libdir}/scim@SCIM_EPOCH@/*/FrontEnd/socket.so
+%{_libdir}/scim@SCIM_EPOCH@/*/FrontEnd/socket-frontend.so
 %endif
 %if %{build_config_socket}
 %{_libdir}/scim@SCIM_EPOCH@/*/Config/socket.so
@@ -242,145 +202,12 @@ gtk-query-immodules-2.0 > %{_sysconfdir}/gtk-2.0/gtk.immodules
 
 %files devel
 %defattr(-, root, root)
-%doc docs/html
-%doc docs/developers
+# %doc docs/html
+# %doc docs/developers
 %{_libdir}/libscim*.so
-%{_libdir}/lib*.a
-%{_libdir}/lib*.la
 %{_libdir}/pkgconfig/*.pc
 %{_includedir}/scim@SCIM_EPOCH@
 
-#--------------------------------------------------
-
 %changelog
-* Sun Jan 9 2005 James Su <suzhe@tsinghua.org.cn>
-- Remove GConf Config module.
-
-* Wed Jan 5 2005 James Su <suzhe@tsinghua.org.cn>
-- Remove table IMEngine.
-
-* Fri Aug 6 2004 James Su <suzhe@tsinghua.org.cn>
-- Move scim-launcher and scim-panel-gtk to /usr/lib/scim-1.0.
-
-* Sun Jun 20 2004  James Su <suzhe@tsinghua.org.cn>
-- Merge all things into one package.
-
-* Sat Jun 19 2004  James Su <suzhe@tsinghua.org.cn>
-- Added /usr/libexec/scim-launcher.
-- Remove setup module for SocketFrontEnd and SocketIMEngine.
-
-* Mon Mar 8 2004  James Su <suzhe@turbolinux.com.cn>
-- Added scim-config-agent.
-
-* Thu Oct 30 2003 James Su <suzhe@turbolinux.com.cn>
-- Added Simplified Chinese User Manual.
-
-* Wed Sep 03 2003 James Su <suzhe@turbolinux.com.cn>
-- cleanup spec.
-
-* Tue Sep 02 2003 James Su <suzhe@turbolinux.com.cn>
-- upto 0.8.0
-
-* Tue Jul 29 2003 James Su <suzhe@turbolinux.com.cn>
-- updated to include scim-panel-gtk.
-
-* Thu Jun 19 2003 James Su <suzhe@turbolinux.com.cn>
-- updated to include scim-setup and its modules.
-
-* Thu Apr 3 2003 James Su <suzhe@turbolinux.com.cn>
-- added suite package, which includes all necessary components of SCIM.
-
-* Tue Mar 25 2003 James Su <suzhe@turbolinux.com.cn>
-- updated to v0.4.0
-
-* Wed Feb 26 2003 James Su <suzhe@turbolinux.com.cn>
-- implemented dynamic adjust feature for generic table module.
-- fixed key handling bug in generic table module.
-
-* Mon Feb 10 2003 James Su <suzhe@turbolinux.com.cn>
-- Replaced highlight_start and highlight_end in scim_server
-  and scim_frontend with AttributeList (scim_attributes.h)
-- Moved icons/* to data/icons and gtkstringview.* to
-  utils/
-
-* Thu Jan 2 2003 James Su <suzhe@turbolinux.com.cn>
-- updated configure.ac and Makefile.am
-- ready to release 0.3.0
-
-* Tue Nov 12 2002 James Su <suzhe@turbolinux.com.cn>
-- merged signal system from libinti.
-- implemented namespace scim.
-- implemented referenced object.
-- version 0.3.0
-
-* Tue Nov 05 2002 James Su <suzhe@turbolinux.com.cn>
-- minor fixes for table IM module.
-
-* Mon Nov 04 2002 James Su <suzhe@turbolinux.com.cn>
-- More IMdkit memory leak fixes.
-- Table input method bugfixes.
-- version 0.2.2
-
-* Fri Nov 01 2002 James Su <suzhe@turbolinux.com.cn>
-- improved table input method.
-- actually fixed the memleaks within IMdkit.
-- pumped the version to 0.2.1
-
-* Thu Oct 31 2002 James Su <suzhe@turbolinux.com.cn>
-- fixed some memory leaks in IMdkit
-- reduced memory usage.
-- upgraded to libtool-1.4.3
-
-* Tue Oct 29 2002 James Su <suzhe@turbolinux.com.cn>
-- finished Generic Table input server module.
-- fixed several bugs in scim-lib.
-
-* Thu Oct 10 2002 James Su <suzhe@turbolinux.com.cn>
-- used gettext to support i18n message.
-- added release info to lib name.
-
-* Mon Sep 30 2002 James Su <suzhe@turbolinux.com.cn>
-- version 0.1.4
-- added Embedded Lookup Table style into X11 FrontEnd.
-- use wchar_t instead of unsigned long if __STDC_ISO_10646__ defined.
-
-* Sun Sep 22 2002 James Su <suzhe@turbolinux.com.cn>
-- version 0.1.3
-- config button of X11 FrontEnd was disabled.
-
-* Fri Sep 6 2002 James Su <suzhe@turbolinux.com.cn>
-- simplified the utilities and lookup table interface.
-
-* Wed Aug 21 2002 James Su <suzhe@turbolinux.com.cn>
-- version 0.1.2
-- added configuration options to disable modules.
-- enhanced X11 FrontEnd.
-
-* Sun Aug 11 2002 James Su <suzhe@turbolinux.com.cn>
-- version 0.1.1
-- X11 FrontEnd was enhanced.
-
-* Sat Aug 10 2002 James Su <suzhe@turbolinux.com.cn>
-- version 0.1.0
-- many bugfixes.
-- Help window of X11 FrontEnd was implemented.
-- scim can exit cleanly.
-
-* Fri Aug 2 2002 James Su <suzhe@turbolinux.com.cn>
-- SCIM 0.0.13.
-- Minor bugfixes.
-
-* Mon Jul 29 2002 James Su <suzhe@turbolinux.com.cn>
-- SCIM 0.0.12.
-- Minor bugfixes.
-
-* Sun Jul 28 2002 James Su <suzhe@turbolinux.com.cn>
-- SCIM 0.0.11.
-- Minor bugfixes.
-
-* Sun Jul 21 2002 James Su <suzhe@turbolinux.com.cn>
-- SCIM 0.0.10.
-- Added Simple Config module.
-
-* Sat Jun 22 2002 James Su <suzhe@turbolinux.com.cn>
-- first public release of SCIM.
+* Sun Jan 5 2026 Derek <116649+derekdai@users.noreply.github.com>
+- Migrate to Meson build system

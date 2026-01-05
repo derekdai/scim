@@ -8,8 +8,8 @@ libscim_sources = [
   'scim_debug.cpp',
   'scim_event.cpp',
   'scim_filter.cpp',
-  'scim_filter_manager.cpp',
   'scim_filter_module.cpp',
+  'scim_filter_manager.cpp',
   'scim_frontend.cpp',
   'scim_frontend_module.cpp',
   'scim_global_config.cpp',
@@ -30,7 +30,7 @@ libscim_sources = [
   'scim_slot.cpp',
   'scim_socket.cpp',
   'scim_transaction.cpp',
-  'scim_utility.cpp',
+  'scim_utility.cpp'
 ]
 
 libscim_headers = [
@@ -47,8 +47,8 @@ libscim_headers = [
   'scim_event.h',
   'scim_exception.h',
   'scim_filter.h',
-  'scim_filter_manager.h',
   'scim_filter_module.h',
+  'scim_filter_manager.h',
   'scim_frontend.h',
   'scim_frontend_module.h',
   'scim_global_config.h',
@@ -59,8 +59,6 @@ libscim_headers = [
   'scim_iconv.h',
   'scim_imengine.h',
   'scim_imengine_module.h',
-  'scim_keyboard_layout_data.h',
-  'scim_keyevent_data.h',
   'scim_lookup_table.h',
   'scim_module.h',
   'scim_object.h',
@@ -68,60 +66,85 @@ libscim_headers = [
   'scim_panel_client.h',
   'scim_panel_common.h',
   'scim_pointer.h',
-  'scim_private.h',
   'scim_property.h',
   'scim_signals.h',
   'scim_slot.h',
   'scim_socket.h',
-  'scim_stl_map.h',
   'scim_trans_commands.h',
   'scim_transaction.h',
+  # 'scim_types.h', # Generated in root build dir
   'scim_utility.h'
 ]
 
-# Generate scim_types.h
-scim_types_h = configure_file(
-  input: 'scim_types.h.in',
-  output: 'scim_types.h',
-  configuration: conf_data
-)
+# Add config.h defines
+add_project_arguments('-DSCIM_DATADIR="@0@"'.format(scim_datadir), language : 'cpp')
+add_project_arguments('-DSCIM_LOCALEDIR="@0@"'.format(scim_localedir), language : 'cpp')
+add_project_arguments('-DSCIM_SYSCONFDIR="@0@"'.format(scim_sysconfdir), language : 'cpp')
+add_project_arguments('-DSCIM_LIBEXECDIR="@0@"'.format(scim_libexecdir), language : 'cpp')
+add_project_arguments('-DSCIM_ICONDIR="@0@"'.format(scim_icondir), language : 'cpp')
+add_project_arguments('-DSCIM_MODULE_PATH="@0@"'.format(scim_module_path), language : 'cpp')
+add_project_arguments('-DSCIM_BINARY_VERSION="@0@"'.format(scim_binary_version), language : 'cpp')
+add_project_arguments('-DHAVE_CONFIG_H', language : 'cpp')
 
-# AM_CPPFLAGS	= -DSCIM_DATADIR=\"@SCIM_DATADIR@\" \
-#			  -DSCIM_LOCALEDIR=\"@SCIM_LOCALEDIR@\" \
-#			  -DSCIM_SYSCONFDIR=\"@SCIM_SYSCONFDIR@\" \
-#			  -DSCIM_LIBEXECDIR=\"@SCIM_LIBEXECDIR@\" \
-#			  -DSCIM_ICONDIR=\"@SCIM_ICONDIR@\" \
-#			  -DSCIM_MODULE_PATH=\"@SCIM_MODULE_PATH@\" \
-#			  -DSCIM_TEMPDIR=\"@SCIM_TEMPDIR@\"
+# Find libintl
+intl_dep = cc.find_library('intl', required : false)
 
-libscim_cpp_args = [
-  '-DSCIM_DATADIR="@0@"'.format(scim_datadir),
-  '-DSCIM_LOCALEDIR="@0@"'.format(scim_localedir),
-  '-DSCIM_SYSCONFDIR="@0@"'.format(scim_sysconfdir),
-  '-DSCIM_LIBEXECDIR="@0@"'.format(scim_libexecdir),
-  '-DSCIM_ICONDIR="@0@"'.format(scim_icondir),
-  '-DSCIM_MODULE_PATH="@0@"'.format(scim_module_path),
-  '-DSCIM_TEMPDIR="@0@"'.format(scim_tempdir),
-  '-DSCIM_VERSION="@0@"'.format(scim_version),
-  '-DSCIM_BINARY_VERSION="@0@"'.format(scim_binary_version)
-]
+link_args = []
+if get_option('ld-version-script')
+  link_args += '-Wl,--version-script=' + meson.current_source_dir() + '/libscim.version-script'
+endif
 
-libscim = library('scim-' + scim_epoch,
-  libscim_sources + [scim_types_h],
-  version: '8.2.3',
-  soversion: '8',
-  include_directories: inc,
-  dependencies: [libltdl, libdl],
-  cpp_args: libscim_cpp_args,
-  install: true
+# Add -export-dynamic to match autotools
+link_args += '-Wl,-export-dynamic'
+
+libscim = shared_library('scim' + scim_epoch,
+  libscim_sources,
+  dependencies : [dl_dep, ltdl_dep, intl_dep],
+  version : scim_lib_version,
+  soversion : scim_so_major,
+  install : true,
+  include_directories : inc,
+  link_args : link_args
 )
 
 libscim_dep = declare_dependency(
-  link_with: libscim,
-  include_directories: [inc, src_inc]
+  link_with : libscim,
+  include_directories : inc,
+  dependencies : [dl_dep, ltdl_dep, intl_dep]
 )
 
-install_headers(libscim_headers, subdir: 'scim')
-install_headers(scim_types_h, subdir: 'scim')
+install_headers(libscim_headers, subdir : 'scim' + scim_epoch)
 
-subdir('executables')
+# Executables
+executable('scim',
+  'scim.cpp',
+  dependencies : libscim_dep,
+  install : true
+)
+
+executable('scim-config-agent',
+  'scim_config_agent.cpp',
+  dependencies : libscim_dep,
+  install : true
+)
+
+executable('scim-launcher',
+  'scim_launcher.cpp',
+  dependencies : libscim_dep,
+  install : true,
+  install_dir : scim_libexecdir
+)
+
+executable('scim-helper-launcher',
+  'scim_helper_launcher.cpp',
+  dependencies : libscim_dep,
+  install : true,
+  install_dir : scim_libexecdir
+)
+
+executable('scim-helper-manager',
+  'scim_helper_manager_server.cpp',
+  dependencies : libscim_dep,
+  install : true,
+  install_dir : scim_libexecdir
+)

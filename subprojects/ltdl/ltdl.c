@@ -1,77 +1,55 @@
 #include "ltdl.h"
 #include <dlfcn.h>
 #include <stdlib.h>
-#include <stdio.h>
 #include <string.h>
-#include <unistd.h>
+#include <stdio.h>
 
-static const char *last_error = NULL;
+/* A simple wrapper around dlopen/dlsym to mock libltdl for environments without it */
 
 int lt_dlinit (void) { return 0; }
 int lt_dlexit (void) { return 0; }
 
-int lt_dlmakeresident (lt_dlhandle handle) { return 0; }
-int lt_dlisresident (lt_dlhandle handle) { return 0; }
-
 lt_dlhandle lt_dlopen (const char *filename) {
-    // If filename is NULL, open self
-    lt_dlhandle handle = dlopen(filename, RTLD_LAZY | RTLD_GLOBAL);
-    if (!handle) {
-        last_error = dlerror();
-    }
-    return handle;
+    if (!filename) return NULL;
+    return dlopen(filename, RTLD_NOW | RTLD_GLOBAL);
 }
 
 lt_dlhandle lt_dlopenext (const char *filename) {
+    if (!filename) return NULL;
+
     lt_dlhandle handle = lt_dlopen(filename);
     if (handle) return handle;
 
-    // Try appending .so
-    if (filename) {
-        char *so_name = (char *)malloc(strlen(filename) + 4);
-        if (so_name) {
-            sprintf(so_name, "%s.so", filename);
-            handle = lt_dlopen(so_name);
-            free(so_name);
-            if (handle) return handle;
-        }
+    /* Try appending .so */
+    char *buf = malloc(strlen(filename) + 4);
+    if (!buf) return NULL;
+    sprintf(buf, "%s.so", filename);
+    handle = lt_dlopen(buf);
+    free(buf);
+    return handle;
+}
 
-        // Also try .la? In a meson build we might not generate .la files,
-        // but if the app asks for them, we should probably check if we can map it to .so
-        // But usually lt_dlopenext is called without extension.
-    }
+void * lt_dlsym (lt_dlhandle handle, const char *symbol) {
+    return dlsym(handle, symbol);
+}
 
-    return NULL;
+const char * lt_dlerror (void) {
+    return dlerror();
 }
 
 int lt_dlclose (lt_dlhandle handle) {
     return dlclose(handle);
 }
 
-lt_ptr lt_dlsym (lt_dlhandle handle, const char *symbol) {
-    lt_ptr ptr = dlsym(handle, symbol);
-    if (!ptr) {
-        last_error = dlerror();
-    }
-    return ptr;
-}
+int lt_dlmakeresident (lt_dlhandle handle) { return 0; }
+int lt_dlisresident (lt_dlhandle handle) { return 0; }
+const lt_dlinfo * lt_dlgetinfo (lt_dlhandle handle) { return NULL; }
 
-const char * lt_dlerror (void) {
-    return last_error;
-}
-
-int lt_dladdsearchdir (const char *search_dir) { return 0; }
-int lt_dlsetsearchpath (const char *search_path) { return 0; }
-const char * lt_dlgetsearchpath (void) { return ""; }
-
-const lt_dlinfo * lt_dlgetinfo (lt_dlhandle handle) {
-    static lt_dlinfo info;
-    info.filename = (char*)"mock_filename";
-    info.name = (char*)"mock_name";
-    info.ref_count = 1;
-    return &info;
-}
-
-int lt_dlforeach (lt_dlforeach_callback *func, lt_ptr data) {
-    return 0;
+int lt_dladvise_init (lt_dladvise *advise) { return 0; }
+int lt_dladvise_destroy (lt_dladvise *advise) { return 0; }
+int lt_dladvise_ext (lt_dladvise *advise) { return 0; }
+int lt_dladvise_global (lt_dladvise *advise) { return 0; }
+lt_dlhandle lt_dlopenadvise (const char *filename, lt_dladvise advise) {
+    /* Ignore advice for now, just dlopen */
+    return lt_dlopenext(filename);
 }

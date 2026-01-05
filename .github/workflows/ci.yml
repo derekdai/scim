@@ -1,0 +1,64 @@
+name: CI
+
+on:
+  push:
+    branches: [ "meson" ]
+  pull_request:
+    branches: [ "meson" ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        container: [ 'ubuntu:22.04', 'ubuntu:24.04', 'ubuntu:rolling' ]
+        include:
+          - container: 'ubuntu:rolling'
+            name: 'Ubuntu Devel (Proxy for 25.10)'
+
+    container:
+      image: ${{ matrix.container }}
+
+    steps:
+    - name: Install basic tools
+      run: |
+        apt-get update
+        apt-get install -y git
+
+    - uses: actions/checkout@v4
+
+    - name: Install dependencies
+      run: |
+        DEBIAN_FRONTEND=noninteractive apt-get install -y \
+          build-essential \
+          meson \
+          ninja-build \
+          intltool \
+          autopoint \
+          pkg-config \
+          libx11-dev \
+          libpango1.0-dev \
+          libglib2.0-dev \
+          libgtk2.0-dev \
+          libgtk-3-dev \
+          libgtk-4-dev \
+          libclutter-1.0-dev \
+          libclutter-imcontext-0.1-dev \
+          libxcb-keysyms1-dev \
+          libqt5x11extras5-dev \
+          qtbase5-dev \
+          qtbase5-private-dev \
+          libsystemd-dev \
+          libdbus-1-dev \
+          libltdl-dev \
+          doxygen
+
+    - name: Setup Meson
+      run: meson setup build
+
+    - name: Compile
+      run: meson compile -C build
+
+    - name: Install
+      run: meson install -C build --destdir ./install_test
