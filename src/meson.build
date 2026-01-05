@@ -1,9 +1,7 @@
 libscim_sources = [
-  'scim.cpp',
   'scim_backend.cpp',
   'scim_chartraits.cpp',
   'scim_compose_key.cpp',
-  'scim_config_agent.cpp',
   'scim_config_base.cpp',
   'scim_config_module.cpp',
   'scim_connection.cpp',
@@ -16,15 +14,12 @@ libscim_sources = [
   'scim_frontend_module.cpp',
   'scim_global_config.cpp',
   'scim_helper.cpp',
-  'scim_helper_launcher.cpp',
   'scim_helper_manager.cpp',
-  'scim_helper_manager_server.cpp',
   'scim_helper_module.cpp',
   'scim_hotkey.cpp',
   'scim_iconv.cpp',
   'scim_imengine.cpp',
   'scim_imengine_module.cpp',
-  'scim_launcher.cpp',
   'scim_lookup_table.cpp',
   'scim_module.cpp',
   'scim_object.cpp',
@@ -128,3 +123,5 @@ libscim_dep = declare_dependency(
 
 install_headers(libscim_headers, subdir: 'scim')
 install_headers(scim_types_h, subdir: 'scim')
+
+subdir('executables')

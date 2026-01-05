@@ -7,7 +7,7 @@ scim_bridge_client_common_src = [
 libscim_bridge_client_common = static_library('scim-bridge-client-common',
     scim_bridge_client_common_src,
     dependencies: scim_bridge_common_dep,
-    include_directories: include_directories('.')
+    include_directories: [include_directories('.'), inc]
 )
 
 scim_bridge_client_common_dep = declare_dependency(
