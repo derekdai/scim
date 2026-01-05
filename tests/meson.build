@@ -1,52 +1,56 @@
-test_progs = [
-  'testsocketserver', 'testsocketclient', 'testiconvert',
-  'testpanel', 'testlang'
-]
-
-# We need libscim dependency which should be available from src/meson.build or root
-# In root meson.build: subdir('src') comes before subdir('tests')
-
-foreach t : test_progs
-  executable(t, t + '.cpp',
-    include_directories: [inc, src_inc],
-    dependencies: [libscim_dep],
-    install: false
-  )
-endforeach
+# tests/meson.build
 
 # Helper module for tests
-helper_mod_dir = join_paths(scim_libdir, 'scim' + scim_epoch, scim_binary_version, 'Helper')
+# It depends on GTK. The source includes <gtk/gtk.h>.
+# We should try to find GTK2 or GTK3 or GTK4.
+# The previous Makefile.am used @GTK_CFLAGS@ and @GTK_LIBS@ which were set by GTK2/3/4 logic in configure.ac
+# Root meson.build defines gtk2_dep, gtk3_dep, gtk4_dep.
+# We'll try to pick one.
 
-# Only build test-helper if we have GTK
-if scim_has_gtk2 or scim_has_gtk3 or scim_has_gtk4
-    test_gtk_dep = dependency('', required: false)
-    if scim_has_gtk3
-        test_gtk_dep = gtk3_dep
-    elif scim_has_gtk2
-        test_gtk_dep = gtk2_dep
-    elif scim_has_gtk4
-        test_gtk_dep = gtk4_dep
-    endif
+gtk_test_dep = dependency('', required : false)
+if gtk3_dep.found()
+  gtk_test_dep = gtk3_dep
+elif gtk2_dep.found()
+  gtk_test_dep = gtk2_dep
+elif gtk4_dep.found()
+  gtk_test_dep = gtk4_dep
+endif
 
-    library('test-helper',
-        ['scim_test_helper.cpp'],
-        include_directories: [inc, src_inc],
-        dependencies: [libscim_dep, test_gtk_dep],
-        install: true,
-        install_dir: helper_mod_dir,
-        name_prefix: '',
-        override_options: ['b_lundef=false']
-    )
+if gtk_test_dep.found()
+  test_helper_sources = ['scim_test_helper.cpp']
+
+  # The test helper uses vbox which is deprecated in GTK3 and removed in GTK4.
+  # If it fails with GTK4, we might need to be careful.
+  # But assuming it compiles if dependency is found (legacy code often stuck on old GTK).
+
+  test_helper = shared_module('test-helper',
+    test_helper_sources,
+    dependencies : [libscim_dep, gtk_test_dep],
+    install : false
+  )
 endif
 
 # IMEngine module for tests
-imengine_mod_dir = join_paths(scim_libdir, 'scim' + scim_epoch, scim_binary_version, 'IMEngine')
-library('test-imengine',
-    ['scim_test_imengine.cpp'],
-    include_directories: [inc, src_inc],
-    dependencies: [libscim_dep],
-    install: true,
-    install_dir: imengine_mod_dir,
-    name_prefix: '',
-    override_options: ['b_lundef=false']
+test_imengine_sources = ['scim_test_imengine.cpp']
+test_imengine = shared_module('test-imengine',
+  test_imengine_sources,
+  dependencies : [libscim_dep],
+  install : false
 )
+
+# Test executables
+test_progs = [
+  'testsocketserver',
+  'testsocketclient',
+  'testiconvert',
+  'testpanel',
+  'testlang'
+]
+
+foreach p : test_progs
+  exe = executable(p,
+    p + '.cpp',
+    dependencies : libscim_dep,
+    install : false
+  )
+endforeach

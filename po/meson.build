@@ -1,1 +1,3 @@
-i18n.gettext('scim', args: '--directory=' + meson.source_root() + '/po')
+# po/meson.build
+i18n = import('i18n')
+i18n.gettext('scim', preset : 'glib')

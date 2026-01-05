@@ -1,265 +1,41 @@
-project('scim', 'cpp', 'c',
-  version: '1.4.19',
-  default_options: ['cpp_std=c++98', 'warning_level=1']
-)
+project('scim', ['c', 'cpp'],
+  version : '1.4.19',
+  default_options : ['warning_level=1', 'cpp_std=c++11', 'buildtype=debugoptimized'])
 
-# Global definition of HAVE_CONFIG_H to ensure config.h is included
-add_project_arguments('-DHAVE_CONFIG_H', language: ['c', 'cpp'])
+scim_major_version = 1
+scim_minor_version = 4
+scim_micro_version = 19
+scim_version = '@0@.@1@.@2@'.format(scim_major_version, scim_minor_version, scim_micro_version)
 
-scim_version = meson.project_version()
-version_arr = scim_version.split('.')
-scim_major_version = version_arr[0]
-scim_minor_version = version_arr[1]
-scim_micro_version = version_arr[2]
+# Library versioning
+# increment if the interface has additions, changes, removals.
+scim_current = 10
+# increment any time the source changes; set to 0 if you increment CURRENT
+scim_revision = 7
+# increment if any interfaces have been added; set to 0
+# if any interfaces have been removed. removal has
+# precedence over adding, so set to 0 if both happened.
+scim_age = 2
+
+# Libtool version calculation: current:revision:age
+# Soname: .so.(current - age)
+# Filename: .so.(current - age).age.revision
+scim_so_major = scim_current - scim_age
+scim_lib_version = '@0@.@1@.@2@'.format(scim_so_major, scim_age, scim_revision)
 
 scim_epoch = '-1.0'
 scim_binary_version = '1.4.0'
 
-# Interface versions
-scim_current = 10
-scim_revision = 7
-scim_age = 2
-
-cc = meson.get_compiler('c')
-cpp = meson.get_compiler('cpp')
-
-conf_data = configuration_data()
-
-conf_data.set_quoted('SCIM_VERSION', scim_version)
-conf_data.set('SCIM_MAJOR_VERSION', scim_major_version)
-conf_data.set('SCIM_MINOR_VERSION', scim_minor_version)
-conf_data.set('SCIM_MICRO_VERSION', scim_micro_version)
-conf_data.set_quoted('SCIM_BINARY_VERSION', scim_binary_version)
-conf_data.set_quoted('SCIM_EPOCH', scim_epoch)
-
-# SCIM Bridge versions
-conf_data.set_quoted('SCIM_BRIDGE_VERSION', scim_version)
-conf_data.set('SCIM_BRIDGE_MAJOR_VERSION', scim_major_version)
-conf_data.set('SCIM_BRIDGE_MINOR_VERSION', scim_minor_version)
-conf_data.set('SCIM_BRIDGE_MICRO_VERSION', scim_micro_version)
-
-conf_data.set_quoted('GETTEXT_PACKAGE', 'scim')
-conf_data.set_quoted('PACKAGE', 'scim')
-conf_data.set_quoted('VERSION', scim_version)
-conf_data.set_quoted('PACKAGE_BUGREPORT', 'https://github.com/scim-im/scim')
-conf_data.set_quoted('PACKAGE_NAME', 'scim')
-conf_data.set_quoted('PACKAGE_STRING', 'scim ' + scim_version)
-conf_data.set_quoted('PACKAGE_TARNAME', 'scim')
-conf_data.set_quoted('PACKAGE_URL', 'https://github.com/scim-im/scim')
-conf_data.set_quoted('PACKAGE_VERSION', scim_version)
-
-# Check headers
-headers = [
-  'langinfo.h', 'libintl.h', 'string.h', 'dirent.h',
-  'hash_map', 'ext/hash_map', 'stdint.h', 'unistd.h',
-  'sys/time.h', 'sys/types.h'
-]
-
-foreach h : headers
-  if cc.has_header(h) or cpp.has_header(h)
-    conf_data.set('HAVE_' + h.underscorify().to_upper(), 1)
-  endif
-endforeach
-
-# Sizes
-conf_data.set('SIZEOF_CHAR', cc.sizeof('char'))
-conf_data.set('SIZEOF_UNSIGNED_SHORT_INT', cc.sizeof('unsigned short int'))
-conf_data.set('SIZEOF_UNSIGNED_INT', cc.sizeof('unsigned int'))
-conf_data.set('SIZEOF_UNSIGNED_LONG_INT', cc.sizeof('unsigned long int'))
-conf_data.set('SIZEOF_UNSIGNED_LONG_LONG_INT', cc.sizeof('unsigned long long int'))
-conf_data.set('SIZEOF_WCHAR_T', cc.sizeof('wchar_t'))
-
-# Types
-if cc.has_header('stdint.h')
-  conf_data.set('INCLUDE_STDINT', '#include <stdint.h>')
-  conf_data.set('UINT16', 'uint16_t')
-  conf_data.set('UINT32', 'uint32_t')
-  conf_data.set('UINT64', 'uint64_t')
-else
-  conf_data.set('INCLUDE_STDINT', '//#include <stdint.h>')
-  conf_data.set('UINT16', 'unsigned short int')
-  if cc.sizeof('unsigned int') == 4
-    conf_data.set('UINT32', 'unsigned int')
-  elif cc.sizeof('unsigned long int') == 4
-    conf_data.set('UINT32', 'unsigned long int')
-  endif
-  if cc.sizeof('unsigned long long int') == 8
-    conf_data.set('UINT64', 'unsigned long long int')
-  endif
-endif
-
-# Functions
-functions = [
-  'gettimeofday', 'memmove', 'memset', 'nl_langinfo', 'setlocale', 'daemon',
-  'opendir', 'closedir', 'readdir', 'usleep', 'nanosleep'
-]
-
-foreach f : functions
-  if cc.has_function(f)
-    conf_data.set('HAVE_' + f.to_upper(), 1)
-  endif
-endforeach
-
-# Socket functions
-socket_funcs = ['gethostbyname', 'gethostbyname_r', 'socket', 'bind', 'accept', 'connect', 'listen']
-socket_ok = true
-foreach f : socket_funcs
-  if not cc.has_function(f)
-    # Check if libsocket is needed (Solaris usually) or other libs
-    # simplified for now as linux usually has them in libc
-    # If strictly strictly needed we can try checking libraries
-    socket_ok = false
-  endif
-endforeach
-
-if socket_ok
-  # No define needed for socket_ok in config.h in original, but needed for build logic
-endif
-
-# Iconv
-libiconv = cc.find_library('iconv', required: false)
-if cc.has_function('iconv_open', dependencies: libiconv)
-  conf_data.set('HAVE_ICONV', 1)
-endif
-
-# Check if iconv() second argument needs const
-# Force empty for Linux/glibc as detection was tricky/incorrect
-conf_data.set('ICONV_CONST', '')
-
-# Dependencies
-libdl = cc.find_library('dl', required : false)
-libltdl = cc.find_library('ltdl', required : false)
-if not libltdl.found()
-  ltdl_proj = subproject('ltdl')
-  libltdl = ltdl_proj.get_variable('ltdl_dep')
-endif
-
-# X11
-x11_dep = dependency('x11', required: get_option('frontend-x11'))
-if x11_dep.found()
-  conf_data.set('HAVE_X11', 1) # Generally implied
-endif
-
-# GTK
-gtk2_dep = dependency('gtk+-2.0', version: '>= 2.4.0', required: get_option('gtk2-immodule'))
-gtk3_dep = dependency('gtk+-3.0', version: '>= 3.0.0', required: get_option('gtk3-immodule'))
-gtk4_dep = dependency('gtk4', version: '>= 4.0.0', required: get_option('gtk4-immodule'))
-
-if gtk2_dep.found()
-    # Check for GDK_MULTIHEAD_SAFE
-    if dependency('gtk+-2.0', version: '>= 2.2', required: false).found()
-        conf_data.set('GDK_MULTIHEAD_SAFE', 1)
-    endif
-endif
-
-# QT
-qt3_dep = dependency('qt-mt', version: '>= 3.3', required: get_option('qt3-immodule'))
-qt4_dep = dependency('QtGui', version: '>= 4.0', required: get_option('qt4-immodule'))
-qt5_dep = dependency('Qt5Core', required: get_option('qt5-immodule'))
-if qt5_dep.found()
-  qt5_widgets = dependency('Qt5Widgets', required: true)
-  qt5_x11 = dependency('Qt5X11Extras', required: true)
-  # Check private headers if possible? Skiping for now.
-endif
-
-# Clutter
-clutter_dep = dependency('clutter-1.0', required: get_option('clutter-immodule'))
-clutter_im_dep = dependency('clutter-imcontext-0.1', required: get_option('clutter-immodule'))
-
-# Systemd / DBus
-libsystemd_dep = dependency('libsystemd', version: '>= 245', required: false)
-dbus_dep = dependency('dbus-1', required: false)
-
-# GThread
-gthread_dep = dependency('gthread-2.0', version: '>= 2.0.0', required: false)
-
-# Logic for SCIM_HAS_*
-scim_has_gtk2 = gtk2_dep.found()
-scim_has_gtk3 = gtk3_dep.found()
-scim_has_gtk4 = gtk4_dep.found()
-scim_has_qt3 = qt3_dep.found()
-scim_has_qt4 = qt4_dep.found()
-scim_has_qt5 = qt5_dep.found()
-scim_has_clutter = clutter_dep.found() and clutter_im_dep.found()
-scim_has_sd = libsystemd_dep.found()
-scim_has_dbus = dbus_dep.found()
-scim_has_gthread2 = gthread_dep.found()
-
-# Configuration switches
-if get_option('enable_debug')
-  conf_data.set('ENABLE_DEBUG', 1)
-  add_project_arguments('-g', language: ['c', 'cpp'])
-endif
-
-if get_option('hash-map')
-  conf_data.set('ENABLE_HASH_MAP', 1)
-endif
-
-# Setup UI logic
-scim_build_setup_ui = false
-if get_option('setup-ui')
-    # Need to select GTK version
-    want_gtk_version = get_option('gtk-version')
-    use_gtk_version = ''
-    
-    if want_gtk_version == 'auto'
-        if scim_has_gtk3
-            use_gtk_version = '3'
-        elif scim_has_gtk2
-            use_gtk_version = '2'
-        elif scim_has_gtk4
-            use_gtk_version = '4'
-        endif
-    else
-        use_gtk_version = want_gtk_version
-    endif
-
-    has_gtk_for_setup = false
-    setup_gtk_dep = dependency('', required: false)
-
-    if use_gtk_version == '4' and scim_has_gtk4
-        has_gtk_for_setup = true
-        setup_gtk_dep = gtk4_dep
-    elif use_gtk_version == '3' and scim_has_gtk3
-        has_gtk_for_setup = true
-        setup_gtk_dep = gtk3_dep
-    elif use_gtk_version == '2' and scim_has_gtk2
-        has_gtk_for_setup = true
-        setup_gtk_dep = gtk2_dep
-    endif
-
-    if has_gtk_for_setup
-        scim_build_setup_ui = true
-        conf_data.set('HAVE_SCIM_SETUP', 1)
-    endif
-endif
-
-# Tray Icon
-enable_tray_icon = false
-if (scim_has_gtk4 or scim_has_gtk3 or scim_has_gtk2) and x11_dep.found()
-    enable_tray_icon = true
-    conf_data.set('ENABLE_TRAY_ICON', 1)
-endif
-
-# Panel GTK
-enable_panel_gtk = false
-if get_option('panel-gtk').enabled()
-  enable_panel_gtk = true
-elif get_option('panel-gtk').auto()
-  if scim_has_gthread2 and (scim_has_gtk2 or scim_has_gtk3 or scim_has_gtk4)
-      enable_panel_gtk = true
-  endif
-endif
-
-# Directories
+# Paths
 prefix = get_option('prefix')
 libdir = join_paths(prefix, get_option('libdir'))
 datadir = join_paths(prefix, get_option('datadir'))
 sysconfdir = join_paths(prefix, get_option('sysconfdir'))
+includedir = join_paths(prefix, get_option('includedir'))
 
 scim_datadir = join_paths(datadir, 'scim')
 scim_sysconfdir = sysconfdir
-scim_icondir = join_paths(datadir, 'scim/icons')
+scim_icondir = join_paths(scim_datadir, 'icons')
 scim_module_path = join_paths(libdir, 'scim' + scim_epoch)
 scim_libexecdir = join_paths(libdir, 'scim' + scim_epoch)
 scim_localedir = join_paths(datadir, 'locale')
@@ -267,105 +43,300 @@ scim_tempdir = '/tmp'
 scim_prefix = prefix
 scim_libdir = libdir
 
-conf_data.set_quoted('SCIM_DATADIR', scim_datadir)
-conf_data.set_quoted('SCIM_SYSCONFDIR', scim_sysconfdir)
-conf_data.set_quoted('SCIM_ICONDIR', scim_icondir)
-conf_data.set_quoted('SCIM_MODULE_PATH', scim_module_path)
-conf_data.set_quoted('SCIM_LIBEXECDIR', scim_libexecdir)
-conf_data.set_quoted('SCIM_LOCALEDIR', scim_localedir)
-conf_data.set_quoted('SCIM_TEMPDIR', scim_tempdir)
-conf_data.set_quoted('SCIM_PREFIX', scim_prefix)
-conf_data.set_quoted('SCIM_LIBDIR', scim_libdir)
+# Dependencies
+cc = meson.get_compiler('c')
+cxx = meson.get_compiler('cpp')
 
-configure_file(output: 'config.h', configuration: conf_data)
+dl_dep = cc.find_library('dl', required : false)
+ltdl_dep = cc.find_library('ltdl', required : false)
+if not ltdl_dep.found()
+  ltdl_proj = subproject('ltdl')
+  ltdl_dep = ltdl_proj.get_variable('ltdl_dep')
+endif
+
+# X11
+x11_dep = dependency('x11', required : get_option('frontend-x11'))
+
+# GTK
+gtk2_dep = dependency('gtk+-2.0', version : '>= 2.4.0', required : false)
+gtk3_dep = dependency('gtk+-3.0', version : '>= 3.0.0', required : false)
+gtk4_dep = dependency('gtk4', version : '>= 4.0.0', required : false)
+pango_dep = dependency('pango', version : '>= 1.1.0', required : false)
+gdk_pixbuf_dep = dependency('gdk-pixbuf-2.0', version : '>= 2.4.0', required : false)
+
+# QT
+qt3_dep = dependency('qt-mt', version : '>= 3.3', required : false)
+qt4_dep = dependency('QtGui', version : '>= 4.0', required : false)
+qt5_dep = dependency('Qt5Core', version : '>= 5.0', required : false)
+if qt5_dep.found()
+  qt5_widgets_dep = dependency('Qt5Widgets', required : false)
+  qt5_x11extras_dep = dependency('Qt5X11Extras', required : false)
+endif
+
+# Other deps
+gthread_dep = dependency('gthread-2.0', version : '>= 2.0.0', required : false)
+libsystemd_dep = dependency('libsystemd', version : '>= 245', required : false)
+dbus_dep = dependency('dbus-1', required : false)
+clutter_dep = dependency('clutter-1.0', required : false)
+clutter_imcontext_dep = dependency('clutter-imcontext-0.1', required : false)
+
+# config.h generation
+conf_data = configuration_data()
+conf_data.set_quoted('SCIM_VERSION', scim_version)
+conf_data.set('SCIM_MAJOR_VERSION', scim_major_version)
+conf_data.set('SCIM_MINOR_VERSION', scim_minor_version)
+conf_data.set('SCIM_MICRO_VERSION', scim_micro_version)
+conf_data.set_quoted('SCIM_BINARY_VERSION', scim_binary_version)
+conf_data.set_quoted('GETTEXT_PACKAGE', 'scim')
+
+# SCIM Bridge Version
+conf_data.set_quoted('SCIM_BRIDGE_VERSION', scim_version)
+conf_data.set('SCIM_BRIDGE_MAJOR_VERSION', scim_major_version)
+conf_data.set('SCIM_BRIDGE_MINOR_VERSION', scim_minor_version)
+conf_data.set('SCIM_BRIDGE_MICRO_VERSION', scim_micro_version)
+
+# GTK2 GDK_MULTIHEAD_SAFE check
+if gtk2_dep.found()
+  # Simple check: if version >= 2.2.0, define it.
+  # Meson dependency objects have version() method.
+  if gtk2_dep.version().version_compare('>= 2.2.0')
+    conf_data.set('GDK_MULTIHEAD_SAFE', 1)
+  endif
+endif
+
+# Check headers and functions
+check_headers = [
+  'langinfo.h', 'libintl.h', 'string.h', 'dirent.h', 'hash_map', 'ext/hash_map',
+  'stdint.h', 'unistd.h'
+]
+
+foreach h : check_headers
+  if cc.has_header(h)
+    conf_data.set('HAVE_' + h.underscorify().to_upper(), 1)
+  endif
+endforeach
+
+# Strict size checks
+if not cc.has_type('size_t', prefix : '#include <stddef.h>')
+    error('No type size_t, but SCIM needs it!')
+endif
+
+sizeof_char = cc.sizeof('char')
+sizeof_short = cc.sizeof('unsigned short int')
+
+if sizeof_short != 2 or sizeof_char != 1
+  error('''
+*** SCIM requires
+***      sizeof (unsigned short int)  == 2
+***      sizeof (char)                == 1
+*** You might want to consider using the GNU C compiler.
+''')
+endif
+
+if cc.sizeof('wchar_t', prefix: '#include <wchar.h>') == 0
+  error('''
+*** SCIM requires a compiler that supports wchar_t,
+*** You might want to consider using the GNU C compiler.
+''')
+endif
+
+check_funcs = [
+  'gettimeofday', 'memmove', 'memset', 'nl_langinfo', 'setlocale', 'daemon',
+  'opendir', 'closedir', 'readdir', 'usleep', 'nanosleep',
+  'gethostbyname', 'gethostbyname_r'
+]
+
+foreach f : check_funcs
+  if cc.has_function(f)
+    conf_data.set('HAVE_' + f.to_upper(), 1)
+  endif
+endforeach
+
+# Socket checks
+if cc.has_function('socket') and cc.has_function('bind') and cc.has_function('accept') and cc.has_function('connect') and cc.has_function('listen')
+  socket_ok = true
+else
+  # Check if we need -lsocket -lnsl etc? For now assuming simple check.
+  # configure.ac checks for gethostbyname etc as well.
+  socket_ok = false
+endif
+
+# Feature options logic (simplified for now, mimicking configure.ac)
+enable_debug = get_option('buildtype').startswith('debug')
+if enable_debug
+  conf_data.set('ENABLE_DEBUG', 1)
+endif
+
+# ICONV check
+# We hardcode ICONV_CONST to empty because the system iconv.h declares it as char**
+# and the detection logic is unreliable or C++ strictness is interfering.
+conf_data.set('ICONV_CONST', '')
+
+enable_hash_map = get_option('hash-map')
+if enable_hash_map
+  conf_data.set('ENABLE_HASH_MAP', 1)
+endif
+
+# Tray icon logic
+enable_tray_icon = false
+if (gtk2_dep.found() or gtk3_dep.found() or gtk4_dep.found()) and x11_dep.found()
+  enable_tray_icon = true
+  conf_data.set('ENABLE_TRAY_ICON', 1)
+endif
+
+# LTDLADVISE
+if get_option('ltdladvise')
+    conf_data.set('SCIM_LTDLADVISE', 1)
+endif
+
+# Generate scim_types.h
+scim_types_data = configuration_data()
+if cc.has_header('stdint.h')
+  scim_types_data.set('INCLUDE_STDINT', '#include <stdint.h>')
+  scim_types_data.set('UINT16', 'uint16_t')
+  scim_types_data.set('UINT32', 'uint32_t')
+  scim_types_data.set('UINT64', 'uint64_t')
+else
+  scim_types_data.set('INCLUDE_STDINT', '//#include <stdint.h>')
+  scim_types_data.set('UINT16', 'unsigned short int')
+  if cc.sizeof('unsigned int') == 4
+    scim_types_data.set('UINT32', 'unsigned int')
+  elif cc.sizeof('unsigned long int') == 4
+     scim_types_data.set('UINT32', 'unsigned long int')
+  else
+     error('*** No suitable integer type for uint32 found.')
+  endif
+
+  if cc.sizeof('unsigned long long int') == 8
+    scim_types_data.set('UINT64', 'unsigned long long int')
+  else
+    error('*** No suitable integer type for uint64 found.')
+  endif
+endif
+
+configure_file(
+  input : 'src/scim_types.h.in',
+  output : 'scim_types.h',
+  configuration : scim_types_data,
+  install : true,
+  install_dir : join_paths(includedir, 'scim' + scim_epoch)
+)
+
+configure_file(output : 'config.h', configuration : conf_data)
 
 # Include directories
-inc = include_directories('.')
-src_inc = include_directories('src')
+inc = include_directories('.', 'src')
 
-# Pkgconfig
-pkg = import('pkgconfig')
-
-# I18n
-i18n = import('i18n')
-
+# Subdirectories
 subdir('src')
 subdir('utils')
 subdir('modules')
-subdir('configs')
 subdir('extras')
 subdir('data')
-
-if get_option('tests')
-  subdir('tests')
-endif
+subdir('configs')
+subdir('po')
 
 if get_option('documents')
   subdir('docs')
 endif
 
-# Po
-subdir('po')
+if get_option('tests')
+  subdir('tests')
+endif
 
-pkg.generate(libscim,
-  name: 'SCIM',
-  description: 'Smart Common Input Method platform',
-  version: scim_version,
-  filebase: 'scim',
-  variables: [
-      'scim_binary_version=' + scim_binary_version,
-      'scim_epoch=' + scim_epoch,
-      'moduledir=${libdir}/scim' + scim_epoch,
-      'icondir=${datadir}/scim/icons'
+# Pkg-config generation
+pkg = import('pkgconfig')
+
+# scim.pc
+pkg.generate(
+  libscim,
+  name : 'SCIM',
+  description : 'Smart Common Input Method platform',
+  version : scim_version,
+  filebase : 'scim',
+  subdirs : 'scim' + scim_epoch,
+  variables : [
+    'scimdatadir=' + join_paths(get_option('prefix'), get_option('datadir'), 'scim'),
+    'icondir=' + join_paths(get_option('prefix'), get_option('datadir'), 'scim', 'icons'),
+    'moduledir=' + join_paths(get_option('prefix'), get_option('libdir'), 'scim' + scim_epoch, scim_binary_version),
+    'scim_binary_version=' + scim_binary_version
   ]
 )
 
-# SCIM Spec file generation
-spec_conf = configuration_data()
-spec_conf.set('PACKAGE', 'scim')
-spec_conf.set('VERSION', scim_version)
-spec_conf.set('SCIM_BUILD_CONFIG_SOCKET', get_option('config-socket') ? 1 : 0)
-spec_conf.set('SCIM_BUILD_CONFIG_SIMPLE', get_option('config-simple') ? 1 : 0)
-spec_conf.set('SCIM_BUILD_FRONTEND_X11', get_option('frontend-x11') ? 1 : 0)
-spec_conf.set('SCIM_BUILD_FRONTEND_SOCKET', get_option('frontend-socket') ? 1 : 0)
-spec_conf.set('SCIM_BUILD_IMENGINE_RAWCODE', get_option('im-rawcode') ? 1 : 0)
-spec_conf.set('SCIM_BUILD_IMENGINE_SOCKET', get_option('im-socket') ? 1 : 0)
-spec_conf.set('SCIM_BUILD_GTK2_IMMODULE', get_option('gtk2-immodule') ? 1 : 0)
-spec_conf.set('SCIM_BUILD_SCIM_SETUP', get_option('setup-ui') ? 1 : 0)
-# Check panel gtk
-spec_conf.set('SCIM_BUILD_PANEL_GTK', enable_panel_gtk ? 1 : 0)
-# Check gtk utils
-build_gtk_utils = scim_build_setup_ui or enable_panel_gtk
-spec_conf.set('SCIM_BUILD_GTK_UTILS', build_gtk_utils ? 1 : 0)
-# Check x11 utils
-spec_conf.set('SCIM_BUILD_X11_UTILS', get_option('frontend-x11') ? 1 : 0)
-spec_conf.set('SCIM_BUILD_FILTER_SCTC', get_option('filter-sctc') ? 1 : 0)
-
-# Variables dependent on GTK version
-if build_gtk_utils and use_gtk_version != ''
-  spec_conf.set('GTK_VERSION', '2.0.0') # Dummy default? Or should assume based on use_gtk_version
-  # scim.spec.in expects @GTK_VERSION@ which comes from AC_SUBST(GTK_VERSION)
-  # In configure.ac it sets GTK_VERSION to the version of GTK found.
-  # We can just put a minimal version.
-  if use_gtk_version == '3'
-     spec_conf.set('GTK_VERSION', '3.0.0')
-  elif use_gtk_version == '4'
-     spec_conf.set('GTK_VERSION', '4.0.0')
-  else
-     spec_conf.set('GTK_VERSION', '2.4.0')
-  endif
-else
-  spec_conf.set('GTK_VERSION', '2.0.0')
+# scim-gtkutils.pc
+if is_variable('libscim_gtkutils')
+  pkg.generate(
+    libscim_gtkutils,
+    name : 'SCIM GTK Utils',
+    description : 'SCIM GTK Utility Library',
+    version : scim_version,
+    filebase : 'scim-gtkutils',
+    subdirs : 'scim' + scim_epoch,
+    requires : [libscim]
+  )
 endif
 
-spec_conf.set('SCIM_EPOCH', scim_epoch)
+# scim-x11utils.pc
+if is_variable('libscim_x11utils')
+  pkg.generate(
+    libscim_x11utils,
+    name : 'SCIM X11 Utils',
+    description : 'SCIM X11 Utility Library',
+    version : scim_version,
+    filebase : 'scim-x11utils',
+    subdirs : 'scim' + scim_epoch,
+    requires : [libscim]
+  )
+endif
 
-# GTK Libdir for immodules
-# scim.spec.in uses @GTK_LIBDIR@
-# We might need to guess or ask pkg-config.
-# Since we might not have GTK installed in this env, we can default to something.
-spec_conf.set('GTK_LIBDIR', libdir)
+# scim.spec generation
+cdata = configuration_data()
+cdata.set('PACKAGE', 'scim')
+cdata.set('VERSION', scim_version)
+cdata.set('SCIM_VERSION', scim_version)
+cdata.set('SCIM_EPOCH', scim_epoch)
+cdata.set('SCIM_BINARY_VERSION', scim_binary_version)
 
-configure_file(input: 'scim.spec.in',
-               output: 'scim.spec',
-               configuration: spec_conf)
+# Default to 0 for these variables, they need actual logic if we want perfection, but
+# matching configure.ac defaults/results is key.
+# In configure.ac these are usually 0 or 1.
+
+cdata.set('SCIM_BUILD_CONFIG_SOCKET', get_option('config-socket') ? 1 : 0)
+cdata.set('SCIM_BUILD_CONFIG_SIMPLE', get_option('config-simple') ? 1 : 0)
+cdata.set('SCIM_BUILD_FRONTEND_X11', get_option('frontend-x11') ? 1 : 0)
+cdata.set('SCIM_BUILD_FRONTEND_SOCKET', get_option('frontend-socket') ? 1 : 0)
+cdata.set('SCIM_BUILD_IMENGINE_RAWCODE', get_option('im-rawcode') ? 1 : 0)
+cdata.set('SCIM_BUILD_IMENGINE_SOCKET', get_option('im-socket') ? 1 : 0)
+cdata.set('SCIM_BUILD_GTK2_IMMODULE', get_option('gtk2-immodule') ? 1 : 0)
+cdata.set('SCIM_BUILD_SCIM_SETUP', get_option('setup-ui') ? 1 : 0)
+
+# These need more complex logic to match exactly what was built, but using options is a good approximation
+cdata.set('SCIM_BUILD_PANEL_GTK', get_option('panel-gtk').enabled() or (get_option('panel-gtk').auto() and gtk2_dep.found()) ? 1 : 0)
+
+# Logic for GTK utils (built if panel or setup-ui is built and gtk exists)
+build_gtk_utils = (get_option('panel-gtk').enabled() or (get_option('panel-gtk').auto() and gtk2_dep.found()) or get_option('setup-ui')) and (gtk2_dep.found() or gtk3_dep.found())
+cdata.set('SCIM_BUILD_GTK_UTILS', build_gtk_utils ? 1 : 0)
+
+# Logic for X11 utils (built if frontend-x11 and x11 exists)
+cdata.set('SCIM_BUILD_X11_UTILS', get_option('frontend-x11') and x11_dep.found() ? 1 : 0)
+
+cdata.set('SCIM_BUILD_FILTER_SCTC', get_option('filter-sctc') ? 1 : 0)
+
+# GTK Version logic for spec
+gtk_version = '2.0.0' # Default
+gtk_libdir = libdir
+if gtk3_dep.found()
+    gtk_version = gtk3_dep.version()
+    gtk_libdir = gtk3_dep.get_variable(pkgconfig : 'libdir')
+elif gtk2_dep.found()
+    gtk_version = gtk2_dep.version()
+    gtk_libdir = gtk2_dep.get_variable(pkgconfig : 'libdir')
+endif
+cdata.set('GTK_VERSION', gtk_version)
+cdata.set('GTK_LIBDIR', gtk_libdir)
+
+configure_file(
+  input : 'scim.spec.in',
+  output : 'scim.spec',
+  configuration : cdata
+)
