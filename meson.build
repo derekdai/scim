@@ -17,6 +17,12 @@ scim_revision = 7
 # precedence over adding, so set to 0 if both happened.
 scim_age = 2
 
+# Libtool version calculation: current:revision:age
+# Soname: .so.(current - age)
+# Filename: .so.(current - age).age.revision
+scim_so_major = scim_current - scim_age
+scim_lib_version = '@0@.@1@.@2@'.format(scim_so_major, scim_age, scim_revision)
+
 scim_epoch = '-1.0'
 scim_binary_version = '1.4.0'
 
@@ -89,6 +95,15 @@ conf_data.set('SCIM_BRIDGE_MAJOR_VERSION', scim_major_version)
 conf_data.set('SCIM_BRIDGE_MINOR_VERSION', scim_minor_version)
 conf_data.set('SCIM_BRIDGE_MICRO_VERSION', scim_micro_version)
 
+# GTK2 GDK_MULTIHEAD_SAFE check
+if gtk2_dep.found()
+  # Simple check: if version >= 2.2.0, define it.
+  # Meson dependency objects have version() method.
+  if gtk2_dep.version().version_compare('>= 2.2.0')
+    conf_data.set('GDK_MULTIHEAD_SAFE', 1)
+  endif
+endif
+
 # Check headers and functions
 check_headers = [
   'langinfo.h', 'libintl.h', 'string.h', 'dirent.h', 'hash_map', 'ext/hash_map',
@@ -127,7 +142,8 @@ endif
 
 check_funcs = [
   'gettimeofday', 'memmove', 'memset', 'nl_langinfo', 'setlocale', 'daemon',
-  'opendir', 'closedir', 'readdir', 'usleep', 'nanosleep'
+  'opendir', 'closedir', 'readdir', 'usleep', 'nanosleep',
+  'gethostbyname', 'gethostbyname_r'
 ]
 
 foreach f : check_funcs
@@ -166,6 +182,11 @@ enable_tray_icon = false
 if (gtk2_dep.found() or gtk3_dep.found() or gtk4_dep.found()) and x11_dep.found()
   enable_tray_icon = true
   conf_data.set('ENABLE_TRAY_ICON', 1)
+endif
+
+# LTDLADVISE
+if get_option('ltdladvise')
+    conf_data.set('SCIM_LTDLADVISE', 1)
 endif
 
 # Generate scim_types.h
