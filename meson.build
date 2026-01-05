@@ -128,7 +128,11 @@ conf_data.set('ICONV_CONST', '')
 
 # Dependencies
 libdl = cc.find_library('dl', required : false)
-libltdl = cc.find_library('ltdl', required : true)
+libltdl = cc.find_library('ltdl', required : false)
+if not libltdl.found()
+  ltdl_proj = subproject('ltdl')
+  libltdl = ltdl_proj.get_variable('ltdl_dep')
+endif
 
 # X11
 x11_dep = dependency('x11', required: get_option('frontend-x11'))
@@ -315,3 +319,53 @@ pkg.generate(libscim,
       'icondir=${datadir}/scim/icons'
   ]
 )
+
+# SCIM Spec file generation
+spec_conf = configuration_data()
+spec_conf.set('PACKAGE', 'scim')
+spec_conf.set('VERSION', scim_version)
+spec_conf.set('SCIM_BUILD_CONFIG_SOCKET', get_option('config-socket') ? 1 : 0)
+spec_conf.set('SCIM_BUILD_CONFIG_SIMPLE', get_option('config-simple') ? 1 : 0)
+spec_conf.set('SCIM_BUILD_FRONTEND_X11', get_option('frontend-x11') ? 1 : 0)
+spec_conf.set('SCIM_BUILD_FRONTEND_SOCKET', get_option('frontend-socket') ? 1 : 0)
+spec_conf.set('SCIM_BUILD_IMENGINE_RAWCODE', get_option('im-rawcode') ? 1 : 0)
+spec_conf.set('SCIM_BUILD_IMENGINE_SOCKET', get_option('im-socket') ? 1 : 0)
+spec_conf.set('SCIM_BUILD_GTK2_IMMODULE', get_option('gtk2-immodule') ? 1 : 0)
+spec_conf.set('SCIM_BUILD_SCIM_SETUP', get_option('setup-ui') ? 1 : 0)
+# Check panel gtk
+spec_conf.set('SCIM_BUILD_PANEL_GTK', enable_panel_gtk ? 1 : 0)
+# Check gtk utils
+build_gtk_utils = scim_build_setup_ui or enable_panel_gtk
+spec_conf.set('SCIM_BUILD_GTK_UTILS', build_gtk_utils ? 1 : 0)
+# Check x11 utils
+spec_conf.set('SCIM_BUILD_X11_UTILS', get_option('frontend-x11') ? 1 : 0)
+spec_conf.set('SCIM_BUILD_FILTER_SCTC', get_option('filter-sctc') ? 1 : 0)
+
+# Variables dependent on GTK version
+if build_gtk_utils and use_gtk_version != ''
+  spec_conf.set('GTK_VERSION', '2.0.0') # Dummy default? Or should assume based on use_gtk_version
+  # scim.spec.in expects @GTK_VERSION@ which comes from AC_SUBST(GTK_VERSION)
+  # In configure.ac it sets GTK_VERSION to the version of GTK found.
+  # We can just put a minimal version.
+  if use_gtk_version == '3'
+     spec_conf.set('GTK_VERSION', '3.0.0')
+  elif use_gtk_version == '4'
+     spec_conf.set('GTK_VERSION', '4.0.0')
+  else
+     spec_conf.set('GTK_VERSION', '2.4.0')
+  endif
+else
+  spec_conf.set('GTK_VERSION', '2.0.0')
+endif
+
+spec_conf.set('SCIM_EPOCH', scim_epoch)
+
+# GTK Libdir for immodules
+# scim.spec.in uses @GTK_LIBDIR@
+# We might need to guess or ask pkg-config.
+# Since we might not have GTK installed in this env, we can default to something.
+spec_conf.set('GTK_LIBDIR', libdir)
+
+configure_file(input: 'scim.spec.in',
+               output: 'scim.spec',
+               configuration: spec_conf)

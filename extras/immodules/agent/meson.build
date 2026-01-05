@@ -7,8 +7,11 @@ executable('scim-im-agent',
      'scim-bridge-agent-accept-listener.cpp',
      'scim-bridge-agent-interruption-listener.cpp',
      'scim-bridge-agent-output.cpp',
-     'scim-bridge-agent-panel-listener.cpp'],
+     'scim-bridge-agent-panel-listener.cpp',
+     'utils/scim-bridge-agent-panel-client.cpp'],
     dependencies: [scim_bridge_common_dep, libltdl, libdl, libscim_dep],
+    include_directories: include_directories('utils'),
+    cpp_args: '-DSCIM_KEYBOARD_ICON_FILE="@0@"'.format(join_paths(scim_icondir, 'keyboard.png')),
     install: true,
     install_dir: scim_libexecdir
 )

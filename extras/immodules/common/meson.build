@@ -14,7 +14,7 @@ scim_bridge_common_src = [
 
 libscim_bridge_common = static_library('scim-bridge-common',
     scim_bridge_common_src,
-    include_directories: include_directories('.'),
+    include_directories: [include_directories('.'), inc],
     dependencies: [libltdl, libdl]
 )
 
