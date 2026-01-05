@@ -177,6 +177,14 @@ subdir('data')
 subdir('configs')
 subdir('po')
 
+if get_option('documents')
+  subdir('docs')
+endif
+
+if get_option('tests')
+  subdir('tests')
+endif
+
 # Pkg-config generation
 pkg = import('pkgconfig')
 
