@@ -7,6 +7,7 @@ if get_option('setup-ui') and gtk_dep_for_utils.found()
   shared_module('aaa-frontend-setup',
     'scim_frontend_setup.cpp',
     dependencies : [libscim_dep, libscim_gtkutils_dep, gtk_dep_for_utils],
+    include_directories : include_directories('../../utils'),
     install : true,
     install_dir : setup_module_dir
   )
@@ -15,6 +16,7 @@ if get_option('setup-ui') and gtk_dep_for_utils.found()
   shared_module('aaa-imengine-setup',
     'scim_imengine_setup.cpp',
     dependencies : [libscim_dep, libscim_gtkutils_dep, gtk_dep_for_utils],
+    include_directories : include_directories('../../utils'),
     install : true,
     install_dir : setup_module_dir
   )

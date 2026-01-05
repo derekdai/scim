@@ -41,9 +41,15 @@ if get_option('panel-gtk').enabled() or (get_option('panel-gtk').auto() and gtk2
         libscim_gtkutils_sources += ['scimtrayicon.c']
     endif
 
+    # Add libscim_x11utils to dependencies if it exists, as scimkeyselection uses it
+    gtkutils_deps = [libscim_dep, gtk_dep_for_utils, x11_dep]
+    if is_variable('libscim_x11utils')
+        gtkutils_deps += libscim_x11utils_dep
+    endif
+
     libscim_gtkutils = shared_library('scim-gtkutils' + scim_epoch,
       libscim_gtkutils_sources,
-      dependencies : [libscim_dep, gtk_dep_for_utils, x11_dep],
+      dependencies : gtkutils_deps,
       version : '@0@.@1@.@2@'.format(scim_current, scim_revision, scim_age),
       soversion : scim_current,
       install : true
@@ -52,7 +58,7 @@ if get_option('panel-gtk').enabled() or (get_option('panel-gtk').auto() and gtk2
     libscim_gtkutils_dep = declare_dependency(
         link_with : libscim_gtkutils,
         dependencies : [libscim_dep, gtk_dep_for_utils],
-        include_directories : inc
+        include_directories : [inc, include_directories('.')]
     )
 
     install_headers(['scimstringview.h', 'scimkeyselection.h'], subdir : 'scim' + scim_epoch + '/gtk')
