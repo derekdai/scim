@@ -320,7 +320,7 @@ QWidget *ScimBridgeClientIMContextImpl::focusWidget() const
 bool ScimBridgeClientIMContextImpl::nativeEventFilter(const QByteArray &eventType, void *message, long *result)
 {
     bool isXcb = eventType.startsWith("xcb");
-    if (!isXcb && !focused_object) return false;
+    if (!isXcb) return false;
 
     xcb_generic_event_t *event = static_cast<xcb_generic_event_t*>(message);
     uint8_t event_type = event->response_type & ~0x80;

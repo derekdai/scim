@@ -13,6 +13,8 @@ scim_revision = 7
 scim_age = 2
 scim_epoch = '-1.0'
 scim_binary_version = '1.4.0'
+scim_lib_version = '8.2.3'
+scim_so_major = '8'
 scim_datadir = join_paths(get_option('prefix'), get_option('datadir'), 'scim')
 scim_sysconfdir = join_paths(get_option('prefix'), get_option('sysconfdir'))
 scim_icondir = join_paths(scim_datadir, 'icons')
@@ -45,6 +47,9 @@ gtk4_dep = dependency('gtk4', version : '>= 4.0.0', required : false)
 qt5_dep = dependency('Qt5Core', required : false)
 qt5_gui_dep = dependency('Qt5Gui', required : false)
 qt5_widgets_dep = dependency('Qt5Widgets', required : false)
+qt3_dep = dependency('qt3', required : false) # Placeholder for Qt3 dependency
+qt4_dep = dependency('qt4', required : false) # Placeholder for Qt4 dependency
+clutter_dep = dependency('clutter-1.0', required : false) # Placeholder for Clutter dependency
 # libsystemd_dep = dependency('libsystemd', version : '>= 245', required : false)
 gio_dep = dependency('gio-2.0', required : false)
 gio_unix_dep = dependency('gio-unix-2.0', required : false)
@@ -62,14 +67,40 @@ check_headers = [
   'sys/time.h', 'unistd.h'
 ]
 
+# Check for socket support
+socket_ok = true # We assume socket support is available on modern systems
+
 foreach h : check_headers
   if cpp.has_header(h)
     add_project_arguments('-DHAVE_' + h.to_upper().replace('/', '_').replace('.', '_'), language : ['c', 'cpp'])
   endif
 endforeach
 
+# Generate scim_types.h
+scim_types_data = configuration_data()
+if cpp.has_header('stdint.h')
+  scim_types_data.set('INCLUDE_STDINT', '#include <stdint.h>')
+  scim_types_data.set('UINT16', 'uint16_t')
+  scim_types_data.set('UINT32', 'uint32_t')
+  scim_types_data.set('UINT64', 'uint64_t')
+else
+  scim_types_data.set('INCLUDE_STDINT', '')
+  scim_types_data.set('UINT16', 'unsigned short')
+  scim_types_data.set('UINT32', 'unsigned int')
+  scim_types_data.set('UINT64', 'unsigned long long')
+endif
+
+configure_file(
+  input : 'src/scim_types.h.in',
+  output : 'scim_types.h',
+  configuration : scim_types_data,
+  install : true,
+  install_dir : join_paths(get_option('includedir'), 'scim-1.0')
+)
+
 # Generate config.h
 conf_data = configuration_data()
+conf_data.set('ICONV_CONST', '')
 conf_data.set('SCIM_VERSION', scim_version)
 conf_data.set('SCIM_BINARY_VERSION', scim_binary_version)
 conf_data.set('GETTEXT_PACKAGE', 'scim')
@@ -78,6 +109,9 @@ configure_file(output : 'config.h', configuration : conf_data)
 
 # Include directories
 inc = include_directories('.', 'src', 'utils', 'extras/panel')
+
+# Subprojects
+ltdl_dep = dependency('ltdl', fallback: ['ltdl', 'ltdl_dep'])
 
 # Subdirectories
 subdir('src')
