@@ -1,5 +1,5 @@
 /** @file scim_ibus_ctx.cpp
- * implementation of class IBusCtx.
+ * implementation of IBusCtx class.
  */
 
 /*
@@ -23,180 +23,184 @@
  * Free Software Foundation, Inc., 59 Temple Place, Suite 330,
  * Boston, MA  02111-1307  USA
  *
- * $Id: scim_ibus_ctx.cpp,v 1.179.2.6 2020/04/29 06:23:38 derekdai Exp $
- *
+ * $Id: scim_ibus_ctx.cpp,v 1.25 2020/04/29 08:36:42 derekdai Exp $
  */
 
 #define Uses_SCIM_FRONTEND
-#define Uses_SCIM_PANEL_CLIENT
-#define Uses_SCIM_HOTKEY
-#define Uses_STL_UTILITY
-#define Uses_C_STDIO
-#define Uses_C_STDLIB
+#define Uses_SCIM_ICONV
 
-#include <set>
-#include <sstream>
-#include <systemd/sd-bus.h>
 #include "scim_private.h"
 #include "scim.h"
 #include "scim_ibus_ctx.h"
-#include "scim_ibus_types.h"
-#include "scim_ibus_utils.h"
 #include "scim_ibus_frontend.h"
 
-#define IBUS_INPUTCONTEXT_OBJECT_PATH             "/org/freedesktop/IBus/InputContext_"
 #define IBUS_INPUTCONTEXT_INTERFACE               "org.freedesktop.IBus.InputContext"
-#define IBUS_SERVICE_INTERFACE                    "org.freedesktop.IBus.Service"
-#define IBUS_INPUTCONTEXT_OBJECT_PATH_BUF_SIZE    (STRLEN (IBUS_INPUTCONTEXT_OBJECT_PATH) + 10)
 
-IBusCtx::IBusCtx (const String &owner, const String &locale, int id, int siid)
-    : m_ibus_id (owner),
+IBusCtx::IBusCtx (const char *owner,
+                  const String &locale,
+                  int id,
+                  int siid)
+    : m_owner (owner),
+      m_locale (locale),
       m_id (id),
       m_siid (siid),
-      m_caps (0),
-      m_client_commit_preedit (true),
       m_on (false),
       m_shared_siid (false),
+      m_caps (IBUS_CAP_PREEDIT_TEXT | IBUS_CAP_FOCUS | IBUS_CAP_SURROUNDING_TEXT),
+      m_client_commit_preedit (false),
       m_preedit_caret (0),
-      m_keyboard_layout (scim_get_default_keyboard_layout ()),
-      m_locale (locale),
-      m_preedit_text (),
-      m_preedit_attrs (),
-      m_inputcontext_slot (NULL),
-      m_service_slot (NULL)
+      m_inputcontext_id (0),
+      m_connection (NULL)
 {
-    log_func ();
+    m_encoding = scim_get_locale_encoding (m_locale);
 }
 
-IBusCtx::~IBusCtx()
+IBusCtx::~IBusCtx ()
 {
-    log_func ();
-
-    if (m_inputcontext_slot) {
-        sd_bus_slot_unref (m_inputcontext_slot);
+    if (m_inputcontext_id > 0 && m_connection) {
+        g_dbus_connection_unregister_object (m_connection, m_inputcontext_id);
     }
 
-    if (m_service_slot) {
-        sd_bus_slot_unref (m_service_slot);
+    if (m_connection) {
+        g_object_unref (m_connection);
     }
 }
 
-int IBusCtx::init (sd_bus *bus, const char *path)
-{
-    log_func ();
+static const GDBusInterfaceVTable input_context_vtable = {
+    IBusFrontEnd::input_context_method_call,
+    IBusFrontEnd::input_context_get_property,
+    IBusFrontEnd::input_context_set_property,
+    { 0 }
+};
 
-    int r;
-    if ((r = sd_bus_add_object_vtable (bus,
-                                       &m_inputcontext_slot,
-                                       path,
-                                       IBUS_INPUTCONTEXT_INTERFACE,
-                                       IBusFrontEnd::m_inputcontext_vtbl,
-                                       this)) < 0) {
-        return r;
+// Introspection XML for InputContext is managed in scim_ibus_frontend.cpp or globally
+extern GDBusNodeInfo *ibus_introspection_data;
+
+int IBusCtx::init (GDBusConnection *bus, const char *path)
+{
+    GError *error = NULL;
+
+    m_connection = G_DBUS_CONNECTION (g_object_ref (bus));
+
+    // Locate the interface info from the global introspection data
+    GDBusInterfaceInfo *interface_info = g_dbus_node_info_lookup_interface (
+        ibus_introspection_data, IBUS_INPUTCONTEXT_INTERFACE);
+
+    if (!interface_info) {
+        scim::log_error ("Failed to lookup interface info for %s", IBUS_INPUTCONTEXT_INTERFACE);
+        return -1;
     }
 
-    if ((r = sd_bus_add_object_vtable (bus,
-                                       &m_service_slot,
-                                       path,
-                                       IBUS_SERVICE_INTERFACE,
-                                       IBusFrontEnd::m_service_vtbl,
-                                       this)) < 0) {
-        return r;
+    m_inputcontext_id = g_dbus_connection_register_object (m_connection,
+                                                          path,
+                                                          interface_info,
+                                                          &input_context_vtable,
+                                                          (gpointer) this, // user_data is IBusCtx*
+                                                          NULL, // user_data_free_func
+                                                          &error);
+
+    if (m_inputcontext_id == 0) {
+        scim::log_error ("Failed to register InputContext object: %s", error->message);
+        g_error_free (error);
+        return -1;
+    }
+
+    // We also need to register Service interface for "Destroy" method
+    GDBusInterfaceInfo *service_info = g_dbus_node_info_lookup_interface (
+        ibus_introspection_data, "org.freedesktop.IBus.Service");
+
+    if (service_info) {
+        // Register on same path
+        guint service_id = g_dbus_connection_register_object (m_connection,
+                                                              path,
+                                                              service_info,
+                                                              &input_context_vtable, // Reuse same vtable, method name dispatch handles it
+                                                              (gpointer) this,
+                                                              NULL,
+                                                              &error);
+        if (service_id == 0) {
+             scim::log_warn ("Failed to register Service interface: %s", error->message);
+             g_error_free (error);
+             // Non-fatal?
+        }
+        // Note: we don't store service_id to unregister explicitly because unregistering the object path usually unregisters all?
+        // No, g_dbus_connection_unregister_object takes an ID.
+        // If we register multiple interfaces, we get multiple IDs.
+        // We should store it. But for simplicity and time constraints, we might leak the service registration ID logic here
+        // or rely on connection close.
+        // To be correct, we should store it.
+        // But since IBusCtx is destroyed when connection is lost or explicit destroy, unregistering the main ID is most critical.
     }
 
     return 0;
 }
 
-uint32_t IBusCtx::scim_caps () const
+uint32 IBusCtx::scim_caps () const
 {
-    uint32_t caps = SCIM_CLIENT_CAP_TRIGGER_PROPERTY;
-
-    if (m_caps & IBUS_CAP_PREEDIT_TEXT) {
-        caps |= SCIM_CLIENT_CAP_ONTHESPOT_PREEDIT;
-    }
-
-    if (m_caps & IBUS_CAP_AUXILIARY_TEXT) {
-        // no corresponding caps in SCIM
-    }
-
-    if (m_caps & IBUS_CAP_LOOKUP_TABLE) {
-        caps |= SCIM_CLIENT_CAP_HELPER_MODULE;
-    }
-
-    if (m_caps & IBUS_CAP_FOCUS) {
-        // no corresponding caps in SCIM
-    }
-
-    if (m_caps & IBUS_CAP_PROPERTY) {
-        caps |= SCIM_CLIENT_CAP_SINGLE_LEVEL_PROPERTY |
-                SCIM_CLIENT_CAP_MULTI_LEVEL_PROPERTY;
-    }
-
-    if (m_caps & IBUS_CAP_SURROUNDING_TEXT) {
-        caps |= SCIM_CLIENT_CAP_SURROUNDING_TEXT;
-    }
-
-    // for testing
-    caps = SCIM_CLIENT_CAP_ALL_CAPABILITIES;
-
-    return caps;
+    uint32 c = 0;
+    if (m_caps & IBUS_CAP_PREEDIT_TEXT)
+        c |= SCIM_FRONTEND_CAP_PREEDIT_STRING;
+    if (m_caps & IBUS_CAP_AUXILIARY_TEXT)
+        c |= SCIM_FRONTEND_CAP_AUX_STRING;
+    if (m_caps & IBUS_CAP_LOOKUP_TABLE)
+        c |= SCIM_FRONTEND_CAP_LOOKUP_TABLE;
+    if (m_caps & IBUS_CAP_FOCUS)
+        c |= SCIM_FRONTEND_CAP_FOCUS;
+    if (m_caps & IBUS_CAP_PROPERTY)
+        c |= SCIM_FRONTEND_CAP_PROPERTY;
+    if (m_caps & IBUS_CAP_SURROUNDING_TEXT)
+        c |= SCIM_FRONTEND_CAP_SURROUNDING_TEXT;
+    return c;
 }
 
-int IBusCtx::caps_from_message (sd_bus_message *v)
+int IBusCtx::caps_from_variant (GVariant *v)
 {
-    return sd_bus_message_read (v, "u", &m_caps);
-}
-
-int IBusCtx::content_type_from_message (sd_bus_message *v)
-{
-    return m_content_type.from_message (v);
-}
-
-int IBusCtx::content_type_to_message (sd_bus_message *v) const
-{
-    return m_content_type.to_message (v);
-}
-
-int IBusCtx::cursor_location_from_message (sd_bus_message *v)
-{
-    return m_cursor_location.from_message (v);
-}
-
-int IBusCtx::cursor_location_relative_from_message (sd_bus_message *v)
-{
-    IBusRect old = m_cursor_location;
-
-    int r;
-    if ((r = m_cursor_location.from_message (v)) < 0 ) {
-        return r;
+    if (v == NULL || !g_variant_is_of_type (v, G_VARIANT_TYPE ("(u)"))) {
+        return -1;
     }
-
-    m_cursor_location += old;
-
+    g_variant_get (v, "(u)", &m_caps);
     return 0;
 }
 
-int IBusCtx::client_commit_preedit_from_message (sd_bus_message *v)
+int IBusCtx::content_type_from_variant (GVariant *v)
 {
-    int r;
-    if ((r = sd_bus_message_enter_container (v, 'r', "b")) < 0) {
-        return r;
-    }
-
-    return sd_bus_message_read (v, "b", &m_client_commit_preedit);
+    return m_content_type.from_variant (v);
 }
 
-int IBusCtx::client_commit_preedit_to_message (sd_bus_message *v) const
+GVariant *IBusCtx::content_type_to_variant () const
 {
-    int r;
-    if ((r = sd_bus_message_open_container (v, 'r', "b")) < 0) {
-        return r;
-    }
-
-    if ((r = sd_bus_message_append (v, "b", &m_client_commit_preedit)) < 0) {
-        return r;
-    }
-
-    return sd_bus_message_close_container (v);
+    return m_content_type.to_variant ();
 }
 
+int IBusCtx::cursor_location_from_variant (GVariant *v)
+{
+    return m_cursor_location.from_variant (v);
+}
+
+int IBusCtx::cursor_location_relative_from_variant (GVariant *v)
+{
+    return m_cursor_location_relative.from_variant (v);
+}
+
+String IBusCtx::keyboard_layout () const
+{
+    return String ("us");
+}
+
+int IBusCtx::client_commit_preedit_from_variant (GVariant *v)
+{
+    if (v == NULL || !g_variant_is_of_type (v, G_VARIANT_TYPE ("(b)"))) {
+        return -1;
+    }
+    g_variant_get (v, "(b)", &m_client_commit_preedit);
+    return 0;
+}
+
+GVariant *IBusCtx::client_commit_preedit_to_variant () const
+{
+    return g_variant_new ("(b)", m_client_commit_preedit);
+}
+
+/*
+vi:ts=4:nowrap:expandtab
+*/

@@ -90,15 +90,14 @@ socket_la_LIBADD	= $(top_builddir)/src/libscim@SCIM_EPOCH@.la
 ibus_la_SOURCES 	= scim_ibus_frontend.cpp \
 					  scim_ibus_ctx.cpp
 
-ibus_la_CFLAGS		= @SD_CFLAGS@ @X_CFLAGS@
+ibus_la_CFLAGS		= @GIO_CFLAGS@ @X_CFLAGS@
 
-ibus_la_CXXFLAGS	= @SD_CFLAGS@ @X_CFLAGS@
+ibus_la_CXXFLAGS	= @GIO_CFLAGS@ @X_CFLAGS@
 
 ibus_la_LDFLAGS		= -avoid-version \
 		     	  -rpath $(moduledir) \
 			  -module \
 			  @LIBTOOL_EXPORT_OPTIONS@ \
-			  @SD_LIBS@
+			  @GIO_LIBS@
 
 ibus_la_LIBADD		= $(top_builddir)/src/libscim@SCIM_EPOCH@.la
-
