@@ -99,7 +99,7 @@ static boolean key_snooper_used = FALSE;
 /* Class functions */
 static void scim_bridge_client_imcontext_class_initialize (ScimBridgeClientIMContextClass *klass, gpointer *klass_data);
 
-static void scim_bridge_client_imcontext_initialize (ScimBridgeClientIMContext *context, ScimBridgeClientIMContextClass *klass);
+static void scim_bridge_client_imcontext_initialize (GTypeInstance *object, gpointer klass);
 static void scim_bridge_client_imcontext_finalize (GObject *object);
 
 static gboolean scim_bridge_client_imcontext_filter_key_event (GtkIMContext *context, GdkEventKey *event);
@@ -172,7 +172,7 @@ static retval_t set_cursor_location (ScimBridgeClientIMContext *imcontext, int w
 }
 
 
-static gboolean key_snooper (GtkWidget *widget, GdkEventKey *event, gpointer data)
+static gint key_snooper (GtkWidget *widget, GdkEventKey *event, gpointer data)
 {
     scim_bridge_pdebugln (7, "key_snooper ()");
 
@@ -651,11 +651,7 @@ void scim_bridge_client_imcontext_register_type (GTypeModule *type_module)
         sizeof (ScimBridgeClientIMContext),
         0,
         /* object initizlier */
-#if GTK_CHECK_VERSION(3, 0, 0)
-        (GInstanceInitFunc) scim_bridge_client_imcontext_initialize,
-#else
-        (GtkObjectInitFunc) scim_bridge_client_imcontext_initialize,
-#endif
+        scim_bridge_client_imcontext_initialize,
         0
     };
 
@@ -672,9 +668,11 @@ GtkIMContext *scim_bridge_client_imcontext_new ()
 }
 
 
-void scim_bridge_client_imcontext_initialize (ScimBridgeClientIMContext *imcontext, ScimBridgeClientIMContextClass *klass)
+void scim_bridge_client_imcontext_initialize (GTypeInstance *object, gpointer klass)
 {
     scim_bridge_pdebugln (5, "scim_bridge_client_imcontext_initialize  ()");
+
+    ScimBridgeClientIMContext *imcontext = SCIM_BRIDGE_CLIENT_IMCONTEXT (object);
 
     /* slave exists for using gtk+'s table based input method */
     imcontext->slave_preedit = FALSE;
