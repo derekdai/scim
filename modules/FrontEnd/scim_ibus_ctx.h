@@ -108,6 +108,7 @@ class IBusCtx
     KeyboardLayout              m_keyboard_layout;
     sd_bus_slot                *m_inputcontext_slot;
     sd_bus_slot                *m_service_slot;
+    sd_bus                     *m_bus;
 
 public:
     IBusCtx (const String &owner, const String &locale, int id, int siid);
@@ -115,6 +116,8 @@ public:
     ~IBusCtx();
 
     int init (sd_bus *bus, const char *path);
+
+    sd_bus *bus () const { return m_bus; }
 
     const String owner () const { return m_ibus_id; }
 
