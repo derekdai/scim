@@ -29,6 +29,9 @@
 #if !defined (__SCIM_IBUS_UTILS_H)
 #define __SCIM_IBUS_UTILS_H
 
+#include "scim_ibus_types.h"
+#include <stdio.h>
+
 #define LOG_LEVEL_TRACE             1
 #define LOG_LEVEL_DEBUG             2
 #define LOG_LEVEL_INFO              3
@@ -55,20 +58,6 @@
 #define log_func_ignored(...)        ({ log_trace("%s ignored", __FUNCTION__); return __VA_ARGS__; })
 #ifndef LOG_LEVEL
 #define LOG_LEVEL                   LOG_LEVEL_INFO
-#endif
-
-#ifndef SD_BUS_METHOD_WITH_NAMES
-#define SD_BUS_METHOD_WITH_NAMES(_member, _signature, _in_names, _result, _out_names, _handler, _flags) \
-    SD_BUS_METHOD(_member, _signature, _result, _handler, _flags)
-#endif
-
-#ifndef SD_BUS_SIGNAL_WITH_NAMES
-#define SD_BUS_SIGNAL_WITH_NAMES(_member, _signature, _names, _flags) \
-    SD_BUS_SIGNAL(_member, _signature, _flags)
-#endif
-
-#ifndef SD_BUS_PARAM
-#define SD_BUS_PARAM(name) {}
 #endif
 
 static inline uint16_t
@@ -168,17 +157,6 @@ scim_ibus_keyevent_to_scim_keyevent (KeyboardLayout layout,
      return KeyEvent (keyval,
                       scim_ibus_keystate_to_scim_keymask (state),
                       layout);
-
-//    if (scimkey.code == SCIM_KEY_backslash) {
-//        int keysym_size = 0;
-//        KeySym *keysyms = XGetKeyboardMapping (display, xkey.keycode, 1, &keysym_size);
-//        if (keysyms != NULL) {
-//            if (keysyms[0] == XK_backslash &&
-//		(keysym_size > 1 && keysyms[1] == XK_underscore))
-//                scimkey.mask |= SCIM_KEY_QuirkKanaRoMask;
-//            XFree (keysyms);
-//        }
-//    }
 }
 
 static bool scim_attr_to_ibus_attr (const Attribute &src, IBusAttribute &dest)
@@ -363,7 +341,3 @@ scim_attr_list_to_str (const AttributeList &attrs,
 #endif
 
 #endif // _SCIM_IBUS_UTILS_H
-
-/*
-vi:ts=4:nowrap:ai:expandtab
-*/

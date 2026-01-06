@@ -1,5 +1,5 @@
 /** @file scim_ibus_ctx.h
- * definition of IBUSCTX related classes.
+ *  @brief definition of IBusCtx class.
  */
 
 /* 
@@ -23,138 +23,132 @@
  * Free Software Foundation, Inc., 59 Temple Place, Suite 330,
  * Boston, MA  02111-1307  USA
  *
- * $Id: scim_ibus_ctx.h,v 1.10 2020/04/29 16:35:12 derekdai Exp $
+ * $Id: scim_ibus_ctx.h,v 1.25 2020/04/29 17:01:56 derekdai Exp $
  */
 
-#if !defined (__SCIM_IBUS_CTX_H)
+#ifndef __SCIM_IBUS_CTX_H
 #define __SCIM_IBUS_CTX_H
 
-#include "scim.h"
+#include <gio/gio.h>
+#include "scim_ibus_types.h"
 
 using namespace scim;
 
 struct IBusContentType
 {
-    uint32_t purpose;
-    uint32_t hints;
+    uint32 purpose;
+    uint32 hints;
 
-    IBusContentType () : purpose (0), hints (0) { }
+    IBusContentType ()
+        : purpose (IBUS_INPUT_PURPOSE_FREE_FORM),
+          hints (IBUS_INPUT_HINT_NONE) { }
 
-    int from_message (sd_bus_message *m)
+    int from_variant (GVariant *v)
     {
-        int r;
-        if ((r = sd_bus_message_enter_container (m, 'r', "uu")) < 0) {
-            return r;
+        if (v == NULL || !g_variant_is_of_type (v, G_VARIANT_TYPE ("(uu)"))) {
+            return -1;
         }
-
-        return sd_bus_message_read (m, "uu", &purpose, &hints);
+        g_variant_get (v, "(uu)", &purpose, &hints);
+        return 0;
     }
 
-    int to_message (sd_bus_message *m) const
+    GVariant *to_variant () const
     {
-        int r;
-        if ((r = sd_bus_message_open_container(m, 'r', "uu")) < 0) {
-            return r;
-        }
-
-        if ((r = sd_bus_message_append(m, "uu", purpose, hints)) < 0) {
-            return r;
-        }
-
-        return sd_bus_message_close_container(m);
+        return g_variant_new ("(uu)", purpose, hints);
     }
 };
 
 struct IBusRect
 {
-    int x;
-    int y;
-    int w;
-    int h;
+    int32 x;
+    int32 y;
+    int32 w;
+    int32 h;
 
-    IBusRect (): x (0), y (0), w (0), h (0) { }
+    IBusRect () : x (0), y (0), w (0), h (0) { }
 
-    int from_message (sd_bus_message *m)
+    int from_variant (GVariant *v)
     {
-        return sd_bus_message_read (m, "iiii", &x, &y, &w, &h);
-    }
-
-    const IBusRect & operator +=(const IBusRect &other)
-    {
-        x += other.x;
-        y += other.y;
-        w += other.w;
-        h += other.h;
-
-        return *this;
+        if (v == NULL || !g_variant_is_of_type (v, G_VARIANT_TYPE ("(iiii)"))) {
+            return -1;
+        }
+        g_variant_get (v, "(iiii)", &x, &y, &w, &h);
+        return 0;
     }
 };
 
 class IBusCtx
 {
-    String                      m_ibus_id;
-    int                         m_id;
-    int                         m_siid;
-    uint32_t                    m_caps;
-    IBusContentType             m_content_type;
-    IBusRect                    m_cursor_location;
-    bool                        m_client_commit_preedit;
-    bool                        m_on;
-    bool                        m_shared_siid;
-    String                      m_locale;
-    WideString                  m_preedit_text;
-    AttributeList               m_preedit_attrs;
-    int                         m_preedit_caret;
-    KeyboardLayout              m_keyboard_layout;
-    sd_bus_slot                *m_inputcontext_slot;
-    sd_bus_slot                *m_service_slot;
+    std::string             m_owner;
+    String                  m_locale;
+    String                  m_encoding;
+
+    int                     m_id;
+    int                     m_siid;
+
+    bool                    m_on;
+    bool                    m_shared_siid;
+
+    uint32                  m_caps;
+    IBusRect                m_cursor_location;
+    IBusRect                m_cursor_location_relative;
+    bool                    m_client_commit_preedit;
+    IBusContentType         m_content_type;
+
+    WideString              m_preedit_text;
+    AttributeList           m_preedit_attrs;
+    int                     m_preedit_caret;
+
+    guint                   m_inputcontext_id;
+    GDBusConnection        *m_connection;
 
 public:
-    IBusCtx (const String &owner, const String &locale, int id, int siid);
+    IBusCtx (const char *owner,
+             const String &locale,
+             int id,
+             int siid);
+    ~IBusCtx ();
 
-    ~IBusCtx();
-
-    int init (sd_bus *bus, const char *path);
-
-    const String owner () const { return m_ibus_id; }
+    int init (GDBusConnection *bus, const char *path);
 
     int id () const { return m_id; }
+    int siid () const { return m_siid; }
 
-    uint32_t caps () const { return m_caps; }
-    uint32_t scim_caps () const;
-    int caps_from_message (sd_bus_message *v);
+    const std::string &owner () const { return m_owner; }
+    const String &locale () const { return m_locale; }
+    const String &encoding () const { return m_encoding; }
 
-    const IBusContentType &content_type() const { return m_content_type; }
-    int content_type_from_message (sd_bus_message *v);
-    int content_type_to_message (sd_bus_message *v) const;
+    bool is_on () const { return m_on; }
+    void on () { m_on = true; }
+    void off () { m_on = false; }
 
-    const IBusRect &cursor_location() const { return m_cursor_location; }
-    IBusRect &cursor_location() { return m_cursor_location; }
-    int cursor_location_from_message (sd_bus_message *v);
-    int cursor_location_relative_from_message (sd_bus_message *v);
+    bool shared_siid () const { return m_shared_siid; }
+    void set_shared_siid (bool shared) { m_shared_siid = shared; }
 
-    int siid() const { return m_siid; }
-    void siid (int siid) { m_siid = siid; }
+    uint32 caps () const { return m_caps; }
+    uint32 scim_caps () const;
 
-    bool shared_siid() const { return m_shared_siid; }
-    void shared_siid (bool shared) { m_shared_siid = shared; }
+    const IBusRect &cursor_location () const { return m_cursor_location; }
+    const IBusRect &cursor_location_relative () const { return m_cursor_location_relative; }
 
-    const String &locale() const { return m_locale; }
-    String encoding() const { return scim_get_locale_encoding (m_locale); }
-    void locale (const String &locale) { m_locale = locale; }
+    int caps_from_variant (GVariant *v);
+
+    int content_type_from_variant (GVariant *v);
+    GVariant *content_type_to_variant () const;
+
+    int cursor_location_from_variant (GVariant *v);
+    int cursor_location_relative_from_variant (GVariant *v);
+
+    String keyboard_layout () const;
 
     const WideString &preedit_text () const { return m_preedit_text; }
-    void preedit_text (const WideString &preedit_text) {
-        m_preedit_text = preedit_text;
-    }
+    void preedit_text (const WideString &t) { m_preedit_text = t; }
 
     const AttributeList &preedit_attrs () const { return m_preedit_attrs; }
-    void preedit_attrs (const AttributeList &attrs) {
-        m_preedit_attrs = attrs;
-    }
+    void preedit_attrs (const AttributeList &a) { m_preedit_attrs = a; }
 
     int preedit_caret () const { return m_preedit_caret; }
-    void preedit_caret (int caret) { m_preedit_caret = caret; }
+    void preedit_caret (int c) { m_preedit_caret = c; }
 
     void preedit_reset () {
         m_preedit_text.clear ();
@@ -162,20 +156,11 @@ public:
         m_preedit_caret = 0;
     }
 
-    bool client_commit_preedit() const { return m_client_commit_preedit; }
-    int client_commit_preedit_from_message (sd_bus_message *v);
-    int client_commit_preedit_to_message (sd_bus_message *v) const;
-
-    KeyboardLayout keyboard_layout() const { return m_keyboard_layout; }
-    void keyboard_layout(KeyboardLayout layout) { m_keyboard_layout = layout; }
-
-    bool is_on() const { return m_on; }
-    void on() { m_on = true; }
-    void off() { m_on = false; }
+    int client_commit_preedit_from_variant (GVariant *v);
+    GVariant *client_commit_preedit_to_variant () const;
 };
 
-
-#endif // _SCIM_IBUS_CTX_H
+#endif
 
 /*
 vi:ts=4:nowrap:ai:expandtab

@@ -300,9 +300,9 @@ PKG_CHECK_MODULES(QT4, [x11, QtGui >= 4.0],
             [SCIM_HAS_QT4=yes],
             [SCIM_HAS_QT4=no])
 
-PKG_CHECK_MODULES(SD, [libsystemd >= 245],
-            [SCIM_HAS_SD=yes],
-            [SCIM_HAS_SD=no])
+PKG_CHECK_MODULES(GIO, [gio-2.0 gio-unix-2.0 glib-2.0],
+            [SCIM_HAS_GIO=yes],
+            [SCIM_HAS_GIO=no])
 
 PKG_CHECK_MODULES(DBUS, [dbus-1],
             [SCIM_HAS_DBUS=yes],
@@ -667,11 +667,11 @@ else
   enable_frontend_socket=no
 fi
 
-if test "$enable_frontend_ibus" = "yes" -a "$SCIM_HAS_SD" = "yes" -a "$SCIM_HAS_DBUS" = "yes"; then
+if test "$enable_frontend_ibus" = "yes" -a "$SCIM_HAS_GIO" = "yes" -a "$SCIM_HAS_DBUS" = "yes"; then
   SCIM_BUILD_FRONTEND_IBUS=1
 else
   SCIM_BUILD_FRONTEND_IBUS=0
-  enable_frontend_ibusus=no
+  enable_frontend_ibus=no
 fi
 
 if test "$enable_im_rawcode" = "yes"; then

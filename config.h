@@ -1,0 +1,7 @@
+#define SCIM_VERSION "1.4.19"
+#define SCIM_BINARY_VERSION "1.4.0"
+#define ENABLE_DEBUG 1
+#define HAVE_STDINT_H 1
+#define HAVE_SYS_TIME_H 1
+#define HAVE_UNISTD_H 1
+#define GETTEXT_PACKAGE "scim"
