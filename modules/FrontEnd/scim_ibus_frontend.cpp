@@ -34,8 +34,12 @@
 
 #include <set>
 #include <sstream>
+#include <fstream>
 #include <cassert>
 #include <cstdarg>
+#include <unistd.h>
+#include <stdlib.h>
+#include <sys/stat.h>
 #include <sys/time.h>
 #include <systemd/sd-event.h>
 #include <systemd/sd-bus.h>
@@ -53,6 +57,8 @@
 
 #define SCIM_KEYBOARD_ICON_FILE                   (SCIM_ICONDIR "/keyboard.png")
 
+#define IBUS_SERVICE                              "org.freedesktop.IBus"
+#define IBUS_INTERFACE                            "org.freedesktop.IBus"
 #define IBUS_PORTAL_SERVICE                       "org.freedesktop.portal.IBus"
 #define IBUS_PORTAL_OBJECT_PATH                   "/org/freedesktop/IBus"
 #define IBUS_PORTAL_INTERFACE                     "org.freedesktop.IBus.Portal"
@@ -272,7 +278,9 @@ IBusFrontEnd::IBusFrontEnd (const BackEndPointer &backend,
       m_ctx_counter (0),
       m_loop (NULL),
       m_bus (NULL),
+      m_portal_bus (NULL),
       m_portal_slot (NULL),
+      m_daemon_slot (NULL),
       m_match_slot (NULL),
       m_panel_source (NULL)
 {
@@ -319,14 +327,26 @@ IBusFrontEnd::~IBusFrontEnd ()
         sd_bus_slot_unref (m_match_slot);
     }
 
+    remove_address_file ();
+
     if (m_portal_slot) {
         sd_bus_slot_unref (m_portal_slot);
     }
 
+    if (m_daemon_slot) {
+        sd_bus_slot_unref (m_daemon_slot);
+    }
+
     if (m_bus) {
-        sd_bus_release_name (m_bus, IBUS_PORTAL_SERVICE);
+        sd_bus_release_name (m_bus, IBUS_SERVICE);
         sd_bus_detach_event (m_bus);
         sd_bus_unref (m_bus);
+    }
+
+    if (m_portal_bus) {
+        sd_bus_release_name (m_portal_bus, IBUS_PORTAL_SERVICE);
+        sd_bus_detach_event (m_portal_bus);
+        sd_bus_unref (m_portal_bus);
     }
 
     if (m_loop) {
@@ -649,19 +669,43 @@ IBusFrontEnd::init (int argc, char **argv)
     }
 
     if (sd_bus_request_name (m_bus,
-                             IBUS_PORTAL_SERVICE,
+                             IBUS_SERVICE,
                              SD_BUS_NAME_ALLOW_REPLACEMENT |
                                  SD_BUS_NAME_REPLACE_EXISTING) < 0) {
         throw FrontEndError (String ("IBus -- failed to aquire service name!"));
     }
 
     if (sd_bus_add_object_vtable (m_bus,
+                                  &m_daemon_slot,
+                                  IBUS_PORTAL_OBJECT_PATH,
+                                  IBUS_INTERFACE,
+                                  m_portal_vtbl,
+                                  this) < 0) {
+        throw FrontEndError (String ("IBus -- failed to add portal object!"));
+    }
+
+    if (sd_bus_open_user (&m_portal_bus) < 0) {
+        throw FrontEndError ("IBusFrontEnd -- Cannot connect to session bus for portal.");
+    }
+
+    if (sd_bus_attach_event (m_portal_bus, m_loop, SD_EVENT_PRIORITY_NORMAL) < 0) {
+        throw FrontEndError ("IBusFrontEnd -- Cannot attach portal bus to loop.");
+    }
+
+    if (sd_bus_request_name (m_portal_bus,
+                             IBUS_PORTAL_SERVICE,
+                             SD_BUS_NAME_ALLOW_REPLACEMENT |
+                                 SD_BUS_NAME_REPLACE_EXISTING) < 0) {
+        throw FrontEndError (String ("IBus -- failed to aquire portal service name!"));
+    }
+
+    if (sd_bus_add_object_vtable (m_portal_bus,
                                   &m_portal_slot,
                                   IBUS_PORTAL_OBJECT_PATH,
                                   IBUS_PORTAL_INTERFACE,
                                   m_portal_vtbl,
                                   this) < 0) {
-        throw FrontEndError (String ("IBus -- failed to add portal object!"));
+        throw FrontEndError (String ("IBus -- failed to add portal object to portal bus!"));
     }
 
     if (sd_bus_add_match (m_bus,
@@ -676,6 +720,8 @@ IBusFrontEnd::init (int argc, char **argv)
                           NULL) < 0) {
         throw FrontEndError (String ("IBus -- failed to add match for NameOwnerChanged signal!"));
     }
+
+    write_address_file ();
 
     if (panel_connect() < 0) {
         throw FrontEndError (String ("IBus -- failed to connect to the panel daemon!"));
@@ -742,7 +788,7 @@ IBusFrontEnd::portal_create_ctx(sd_bus_message *m)
                                 locale,
                                 id,
                                 siid);
-    if ((r = ctx->init (m_bus, path))) {
+    if ((r = ctx->init (sd_bus_message_get_bus (m), path))) {
         return r;
     }
 
@@ -1355,7 +1401,7 @@ IBusFrontEnd::signal_ctx (int siid, const char *signal, ...) const
 
     int r;
     autounref(sd_bus_message) m = NULL;
-    if ((r = sd_bus_message_new_signal (m_bus,
+    if ((r = sd_bus_message_new_signal (ctx->bus (),
                                         &m,
                                         path,
                                         IBUS_INPUTCONTEXT_INTERFACE,
@@ -1377,7 +1423,7 @@ IBusFrontEnd::signal_ctx (int siid, const char *signal, ...) const
 
     log_trace ("emit %s.%s => %s", path, signal, ctx->owner ().c_str());
 
-    if ((r = sd_bus_send (m_bus, m, NULL)) < 0) {
+    if ((r = sd_bus_send (ctx->bus (), m, NULL)) < 0) {
         log_warn ("unabled to emit %s.%s: %s",
                   sd_bus_message_get_interface (m),
                   sd_bus_message_get_member (m),
@@ -1748,6 +1794,86 @@ IBusFrontEnd::panel_req_update_spot_location (const IBusCtx *ctx)
                                          ctx->cursor_location ().x,
                                          ctx->cursor_location ().y +
                                              ctx->cursor_location ().h);
+}
+
+void
+IBusFrontEnd::write_address_file ()
+{
+    const char *config_home = getenv ("XDG_CONFIG_HOME");
+    std::string path;
+    if (config_home) {
+        path = config_home;
+    } else {
+        const char *home = getenv ("HOME");
+        if (home) {
+            path = std::string (home) + "/.config";
+        }
+    }
+
+    if (path.empty ()) return;
+
+    path += "/ibus/bus/";
+
+    String machine_id;
+    std::ifstream mid_file ("/etc/machine-id");
+    if (!mid_file) mid_file.open ("/var/lib/dbus/machine-id");
+    if (mid_file) {
+        std::getline (mid_file, machine_id);
+    }
+    if (machine_id.empty ()) return;
+
+    char hostname[256];
+    if (gethostname (hostname, sizeof (hostname)) != 0) return;
+
+    const char *display = getenv ("DISPLAY");
+    if (!display) display = ":0";
+
+    String display_num = display;
+    String::size_type pos = display_num.find (':');
+    if (pos != String::npos) {
+        display_num = display_num.substr (pos + 1);
+    }
+    pos = display_num.find ('.');
+    if (pos != String::npos) {
+        display_num = display_num.substr (0, pos);
+    }
+
+    String filename = machine_id + "-" + hostname + "-" + display_num;
+    m_address_file_path = path + filename;
+
+    // Create directory
+    std::string current_path;
+    String::size_type start = 0;
+    while ((pos = path.find ('/', start)) != std::string::npos) {
+        if (pos != start) {
+            current_path = path.substr (0, pos);
+            if (!current_path.empty ()) {
+                 mkdir (current_path.c_str (), 0700);
+            }
+        }
+        start = pos + 1;
+    }
+    if (start < path.length ()) {
+        mkdir (path.c_str (), 0700);
+    }
+
+    const char *address;
+    if (sd_bus_get_address (m_bus, &address) < 0) return;
+
+    std::ofstream out_file (m_address_file_path.c_str ());
+    if (out_file) {
+        out_file << "IBUS_ADDRESS=" << address << "\n";
+        out_file << "IBUS_DAEMON_PID=" << getpid () << "\n";
+    }
+}
+
+void
+IBusFrontEnd::remove_address_file ()
+{
+    if (!m_address_file_path.empty ()) {
+        unlink (m_address_file_path.c_str ());
+        m_address_file_path.clear ();
+    }
 }
 
 bool

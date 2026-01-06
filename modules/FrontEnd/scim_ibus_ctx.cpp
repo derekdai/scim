@@ -63,7 +63,8 @@ IBusCtx::IBusCtx (const String &owner, const String &locale, int id, int siid)
       m_preedit_text (),
       m_preedit_attrs (),
       m_inputcontext_slot (NULL),
-      m_service_slot (NULL)
+      m_service_slot (NULL),
+      m_bus (NULL)
 {
     log_func ();
 }
@@ -84,6 +85,8 @@ IBusCtx::~IBusCtx()
 int IBusCtx::init (sd_bus *bus, const char *path)
 {
     log_func ();
+
+    m_bus = bus;
 
     int r;
     if ((r = sd_bus_add_object_vtable (bus,

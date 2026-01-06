@@ -64,9 +64,13 @@ class IBusFrontEnd : public FrontEndBase
 
     sd_event               *m_loop; 
     sd_bus                 *m_bus; 
+    sd_bus                 *m_portal_bus;
     sd_bus_slot            *m_portal_slot;
+    sd_bus_slot            *m_daemon_slot;
     sd_bus_slot            *m_match_slot;
     sd_event_source        *m_panel_source;
+
+    String                  m_address_file_path;
 
     static const sd_bus_vtable  m_portal_vtbl[];
     static const sd_bus_vtable  m_inputcontext_vtbl[];
@@ -190,6 +194,9 @@ private:
     void panel_req_update_spot_location   (const IBusCtx *ctx);
 
     bool filter_hotkeys                   (IBusCtx *ctx, const KeyEvent &key);
+
+    void write_address_file               ();
+    void remove_address_file              ();
 };
 
 #endif
